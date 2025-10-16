@@ -1,0 +1,255 @@
+-- ============================================
+-- SHIPMENTS READY FOR DRIVER ASSIGNMENT
+-- ============================================
+-- Shows shipments that will get driver from pickup line (RNFIL329)
+-- This query identifies shipments that need driver assignment based on pickup line configuration
+-- ============================================
+
+-- ORIGINAL QUERY (Enhanced Version)
+SELECT 
+    m.MS_SHLICHOT AS 'Shipment_ID',
+    m.LAKOACH AS 'Customer_ID',
+    m.NAG AS 'Current_Driver',
+    m.SHLAV_SHLIHUT AS 'Stage',
+    s10.TEUR_SHLAV AS 'Stage_Description',
+    m.NKODAT_HLOKA_MAKOR AS 'Current_Pickup_Point',
+    m.NKODAT_HLOKA_YAAD AS 'Current_Destination_Point',
+    s10.KSHOR_L_1249 AS 'Stage_Type',
+    k329.NAG_BM AS 'Assigned_Driver_From_Pickup_Line',
+    k329.TEUR AS 'Driver_Description',
+    l330.KOD_KO AS 'Pickup_Line_Code',
+    m.TAARICH_BITZOOA AS 'Execution_Date',
+    m.SHLIHUT_HOVLA_ASAA AS 'Transport_Type',
+    m.MSIRA_ISOF_HOFSHI AS 'Delivery_Type',
+    CASE 
+        WHEN s10.KSHOR_L_1249 = 2 THEN 'Destination Stage - Missing Destination Point'
+        WHEN s10.KSHOR_L_1249 != 2 THEN 'Pickup Stage - Missing Pickup Point'
+        ELSE 'Unknown'
+    END AS 'Missing_Point_Type',
+    CASE 
+        WHEN s10.KSHOR_L_1249 = 2 THEN l330.KOD_KO
+        ELSE m.NKODAT_HLOKA_YAAD 
+    END AS 'Will_Set_Destination_Point',
+    CASE 
+        WHEN s10.KSHOR_L_1249 != 2 THEN l330.KOD_KO
+        ELSE m.NKODAT_HLOKA_MAKOR 
+    END AS 'Will_Set_Pickup_Point'
+FROM RNFIL007 m
+INNER JOIN RNFIL010 s10 
+    ON s10.KOD_SHLAV = m.SHLAV_SHLIHUT
+INNER JOIN RNFIL330 l330 
+    ON l330.LAKOACH = m.LAKOACH 
+    AND l330.PIL = 1 
+    AND l330.KOD_KO >= 1
+INNER JOIN RNFIL329 k329 
+    ON k329.KOD_KO_ISOF = l330.KOD_KO 
+    AND k329.NAG_BM > 0
+LEFT JOIN RNFIL258 s258 
+    ON s258.LAKOACH = m.LAKOACH 
+    AND s258.TARIKH = CONVERT(DATE, GETDATE())
+    AND s258.NAG > 0
+LEFT JOIN RNFIL292 a292_1 
+    ON a292_1.KOD_APION = 101 
+    AND a292_1.LAKOACH = m.LAKOACH
+LEFT JOIN RNFIL292 a292_2 
+    ON a292_2.KOD_APION = 102 
+    AND a292_2.LAKOACH = m.LAKOACH
+WHERE 
+    m.TAARICH_BITZOOA = CONVERT(DATE, GETDATE())
+    AND m.SHLIHUT_HOVLA_ASAA = N'הובלה'
+    AND m.NAG = 0
+    AND m.MSIRA_ISOF_HOFSHI = N'מסירה'
+    AND ISNULL(a292_1.LOGI, 0) = 0
+    AND ISNULL(a292_2.LOGI, 0) = 0
+    AND s258.NAG IS NULL  -- NO existing sweeping driver
+    AND (
+        (s10.KSHOR_L_1249 = 2 AND m.NKODAT_HLOKA_YAAD = 0) OR      -- Destination stage but no point
+        (s10.KSHOR_L_1249 != 2 AND m.NKODAT_HLOKA_MAKOR = 0)       -- Pickup stage but no point
+    )
+ORDER BY m.MS_SHLICHOT;
+
+
+-- ============================================
+-- SIMPLIFIED VERSION (Core Information Only)
+-- ============================================
+
+SELECT 
+    m.MS_SHLICHOT,
+    m.LAKOACH,
+    m.NAG,
+    m.SHLAV_SHLIHUT,
+    m.NKODAT_HLOKA_MAKOR,
+    m.NKODAT_HLOKA_YAAD,
+    s10.KSHOR_L_1249,
+    k329.NAG_BM AS 'NAG_FROM_RNFIL329',
+    l330.KOD_KO AS 'PICKUP_LINE'
+FROM RNFIL007 m
+INNER JOIN RNFIL010 s10 ON s10.KOD_SHLAV = m.SHLAV_SHLIHUT
+INNER JOIN RNFIL330 l330 ON l330.LAKOACH = m.LAKOACH AND l330.PIL = 1 AND l330.KOD_KO >= 1
+INNER JOIN RNFIL329 k329 ON k329.KOD_KO_ISOF = l330.KOD_KO AND k329.NAG_BM > 0
+LEFT JOIN RNFIL258 s258 ON s258.LAKOACH = m.LAKOACH 
+    AND s258.TARIKH = CONVERT(DATE, GETDATE())
+    AND s258.NAG > 0
+LEFT JOIN RNFIL292 a292_1 ON a292_1.KOD_APION = 101 AND a292_1.LAKOACH = m.LAKOACH
+LEFT JOIN RNFIL292 a292_2 ON a292_2.KOD_APION = 102 AND a292_2.LAKOACH = m.LAKOACH
+WHERE 
+    m.TAARICH_BITZOOA = CONVERT(DATE, GETDATE())
+    AND m.SHLIHUT_HOVLA_ASAA = N'הובלה'
+    AND m.NAG = 0
+    AND m.MSIRA_ISOF_HOFSHI = N'מסירה'
+    AND ISNULL(a292_1.LOGI, 0) = 0
+    AND ISNULL(a292_2.LOGI, 0) = 0
+    AND s258.NAG IS NULL
+    AND (
+        (s10.KSHOR_L_1249 = 2 AND m.NKODAT_HLOKA_YAAD = 0) OR
+        (s10.KSHOR_L_1249 != 2 AND m.NKODAT_HLOKA_MAKOR = 0)
+    )
+ORDER BY m.MS_SHLICHOT;
+
+
+-- ============================================
+-- WITH STATISTICS (Count Summary)
+-- ============================================
+
+SELECT 
+    COUNT(*) AS 'Total_Shipments_Needing_Driver',
+    COUNT(DISTINCT m.LAKOACH) AS 'Total_Customers',
+    COUNT(DISTINCT k329.NAG_BM) AS 'Total_Drivers_To_Assign',
+    COUNT(DISTINCT m.SHLAV_SHLIHUT) AS 'Total_Stages'
+FROM RNFIL007 m
+INNER JOIN RNFIL010 s10 ON s10.KOD_SHLAV = m.SHLAV_SHLIHUT
+INNER JOIN RNFIL330 l330 ON l330.LAKOACH = m.LAKOACH AND l330.PIL = 1 AND l330.KOD_KO >= 1
+INNER JOIN RNFIL329 k329 ON k329.KOD_KO_ISOF = l330.KOD_KO AND k329.NAG_BM > 0
+LEFT JOIN RNFIL258 s258 ON s258.LAKOACH = m.LAKOACH 
+    AND s258.TARIKH = CONVERT(DATE, GETDATE())
+    AND s258.NAG > 0
+LEFT JOIN RNFIL292 a292_1 ON a292_1.KOD_APION = 101 AND a292_1.LAKOACH = m.LAKOACH
+LEFT JOIN RNFIL292 a292_2 ON a292_2.KOD_APION = 102 AND a292_2.LAKOACH = m.LAKOACH
+WHERE 
+    m.TAARICH_BITZOOA = CONVERT(DATE, GETDATE())
+    AND m.SHLIHUT_HOVLA_ASAA = N'הובלה'
+    AND m.NAG = 0
+    AND m.MSIRA_ISOF_HOFSHI = N'מסירה'
+    AND ISNULL(a292_1.LOGI, 0) = 0
+    AND ISNULL(a292_2.LOGI, 0) = 0
+    AND s258.NAG IS NULL
+    AND (
+        (s10.KSHOR_L_1249 = 2 AND m.NKODAT_HLOKA_YAAD = 0) OR
+        (s10.KSHOR_L_1249 != 2 AND m.NKODAT_HLOKA_MAKOR = 0)
+    );
+
+
+-- ============================================
+-- GROUPED BY CUSTOMER
+-- ============================================
+
+SELECT 
+    m.LAKOACH AS 'Customer_ID',
+    COUNT(*) AS 'Shipments_Count',
+    k329.NAG_BM AS 'Driver_To_Assign',
+    k329.TEUR AS 'Driver_Name',
+    l330.KOD_KO AS 'Pickup_Line',
+    MIN(m.MS_SHLICHOT) AS 'First_Shipment',
+    MAX(m.MS_SHLICHOT) AS 'Last_Shipment'
+FROM RNFIL007 m
+INNER JOIN RNFIL010 s10 ON s10.KOD_SHLAV = m.SHLAV_SHLIHUT
+INNER JOIN RNFIL330 l330 ON l330.LAKOACH = m.LAKOACH AND l330.PIL = 1 AND l330.KOD_KO >= 1
+INNER JOIN RNFIL329 k329 ON k329.KOD_KO_ISOF = l330.KOD_KO AND k329.NAG_BM > 0
+LEFT JOIN RNFIL258 s258 ON s258.LAKOACH = m.LAKOACH 
+    AND s258.TARIKH = CONVERT(DATE, GETDATE())
+    AND s258.NAG > 0
+LEFT JOIN RNFIL292 a292_1 ON a292_1.KOD_APION = 101 AND a292_1.LAKOACH = m.LAKOACH
+LEFT JOIN RNFIL292 a292_2 ON a292_2.KOD_APION = 102 AND a292_2.LAKOACH = m.LAKOACH
+WHERE 
+    m.TAARICH_BITZOOA = CONVERT(DATE, GETDATE())
+    AND m.SHLIHUT_HOVLA_ASAA = N'הובלה'
+    AND m.NAG = 0
+    AND m.MSIRA_ISOF_HOFSHI = N'מסירה'
+    AND ISNULL(a292_1.LOGI, 0) = 0
+    AND ISNULL(a292_2.LOGI, 0) = 0
+    AND s258.NAG IS NULL
+    AND (
+        (s10.KSHOR_L_1249 = 2 AND m.NKODAT_HLOKA_YAAD = 0) OR
+        (s10.KSHOR_L_1249 != 2 AND m.NKODAT_HLOKA_MAKOR = 0)
+    )
+GROUP BY m.LAKOACH, k329.NAG_BM, k329.TEUR, l330.KOD_KO
+ORDER BY m.LAKOACH;
+
+
+-- ============================================
+-- GROUPED BY DRIVER
+-- ============================================
+
+SELECT 
+    k329.NAG_BM AS 'Driver_ID',
+    k329.TEUR AS 'Driver_Name',
+    COUNT(*) AS 'Shipments_To_Assign',
+    COUNT(DISTINCT m.LAKOACH) AS 'Customers_Count',
+    STRING_AGG(CAST(m.LAKOACH AS VARCHAR), ', ') AS 'Customer_List'
+FROM RNFIL007 m
+INNER JOIN RNFIL010 s10 ON s10.KOD_SHLAV = m.SHLAV_SHLIHUT
+INNER JOIN RNFIL330 l330 ON l330.LAKOACH = m.LAKOACH AND l330.PIL = 1 AND l330.KOD_KO >= 1
+INNER JOIN RNFIL329 k329 ON k329.KOD_KO_ISOF = l330.KOD_KO AND k329.NAG_BM > 0
+LEFT JOIN RNFIL258 s258 ON s258.LAKOACH = m.LAKOACH 
+    AND s258.TARIKH = CONVERT(DATE, GETDATE())
+    AND s258.NAG > 0
+LEFT JOIN RNFIL292 a292_1 ON a292_1.KOD_APION = 101 AND a292_1.LAKOACH = m.LAKOACH
+LEFT JOIN RNFIL292 a292_2 ON a292_2.KOD_APION = 102 AND a292_2.LAKOACH = m.LAKOACH
+WHERE 
+    m.TAARICH_BITZOOA = CONVERT(DATE, GETDATE())
+    AND m.SHLIHUT_HOVLA_ASAA = N'הובלה'
+    AND m.NAG = 0
+    AND m.MSIRA_ISOF_HOFSHI = N'מסירה'
+    AND ISNULL(a292_1.LOGI, 0) = 0
+    AND ISNULL(a292_2.LOGI, 0) = 0
+    AND s258.NAG IS NULL
+    AND (
+        (s10.KSHOR_L_1249 = 2 AND m.NKODAT_HLOKA_YAAD = 0) OR
+        (s10.KSHOR_L_1249 != 2 AND m.NKODAT_HLOKA_MAKOR = 0)
+    )
+GROUP BY k329.NAG_BM, k329.TEUR
+ORDER BY COUNT(*) DESC;
+
+
+-- ============================================
+-- WITH DATE PARAMETER (Flexible Date)
+-- ============================================
+
+DECLARE @TargetDate DATE = CONVERT(DATE, GETDATE());
+
+SELECT 
+    m.MS_SHLICHOT,
+    m.LAKOACH,
+    m.NAG,
+    m.SHLAV_SHLIHUT,
+    m.NKODAT_HLOKA_MAKOR,
+    m.NKODAT_HLOKA_YAAD,
+    s10.KSHOR_L_1249,
+    k329.NAG_BM AS 'NAG_FROM_RNFIL329',
+    l330.KOD_KO AS 'PICKUP_LINE'
+FROM RNFIL007 m
+INNER JOIN RNFIL010 s10 ON s10.KOD_SHLAV = m.SHLAV_SHLIHUT
+INNER JOIN RNFIL330 l330 ON l330.LAKOACH = m.LAKOACH AND l330.PIL = 1 AND l330.KOD_KO >= 1
+INNER JOIN RNFIL329 k329 ON k329.KOD_KO_ISOF = l330.KOD_KO AND k329.NAG_BM > 0
+LEFT JOIN RNFIL258 s258 ON s258.LAKOACH = m.LAKOACH 
+    AND s258.TARIKH = @TargetDate
+    AND s258.NAG > 0
+LEFT JOIN RNFIL292 a292_1 ON a292_1.KOD_APION = 101 AND a292_1.LAKOACH = m.LAKOACH
+LEFT JOIN RNFIL292 a292_2 ON a292_2.KOD_APION = 102 AND a292_2.LAKOACH = m.LAKOACH
+WHERE 
+    m.TAARICH_BITZOOA = @TargetDate
+    AND m.SHLIHUT_HOVLA_ASAA = N'הובלה'
+    AND m.NAG = 0
+    AND m.MSIRA_ISOF_HOFSHI = N'מסירה'
+    AND ISNULL(a292_1.LOGI, 0) = 0
+    AND ISNULL(a292_2.LOGI, 0) = 0
+    AND s258.NAG IS NULL
+    AND (
+        (s10.KSHOR_L_1249 = 2 AND m.NKODAT_HLOKA_YAAD = 0) OR
+        (s10.KSHOR_L_1249 != 2 AND m.NKODAT_HLOKA_MAKOR = 0)
+    )
+ORDER BY m.MS_SHLICHOT;
+
+-- ============================================
+-- END OF SELECT QUERIES
+-- ============================================
