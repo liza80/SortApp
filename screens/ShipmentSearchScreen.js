@@ -1,13 +1,71 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { sortingAPI } from '../config/api';
 
 export default function ShipmentSearchScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('manual');
   const [shipmentNumber, setShipmentNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSearch = () => {
-    if (shipmentNumber.trim()) {
-      navigation.navigate('ShipmentDetails', { shipmentNumber: shipmentNumber.trim() });
+  const handleSearch = async () => {
+    if (!shipmentNumber.trim()) {
+      setErrorMessage('אנא הזן מספר משלוח');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage(''); // Clear previous errors
+    try {
+      // Call the API to get shipment details
+      const response = await sortingAPI.getShipmentDetails(shipmentNumber.trim());
+      
+      // Check if the response was successful
+      if (response.success && response.data && response.data.success) {
+        // Navigate to details screen with the API response
+        navigation.navigate('ShipmentDetails', { 
+          shipmentData: response.data,
+          barcode: shipmentNumber.trim()
+        });
+      } else {
+        // Show error message from API
+        const errMsg = response.data?.errorMessage || 
+                       response.errorMessage || 
+                       'לא נמצאו פרטים עבור משלוח זה';
+        setErrorMessage(errMsg);
+      }
+    } catch (error) {
+      console.error('Error searching shipment:', error);
+      
+      // Handle different error types
+      if (error.response) {
+        // Server responded with error status (including 404)
+        const status = error.response.status;
+        let errMsg = 'שגיאה בשרת';
+        
+        // Try to extract error message from response
+        if (error.response.data) {
+          errMsg = error.response.data.data?.errorMessage || 
+                   error.response.data.errorMessage ||
+                   error.response.data.message || 
+                   errMsg;
+        }
+        
+        // Special handling for 404
+        if (status === 404) {
+          setErrorMessage(errMsg === 'שגיאה בשרת' ? 'משלוח לא נמצא במערכת' : errMsg);
+        } else {
+          setErrorMessage(errMsg);
+        }
+      } else if (error.request) {
+        // Request was made but no response
+        setErrorMessage('שגיאת תקשורת - לא ניתן להתחבר לשרת');
+      } else {
+        // Something else happened
+        setErrorMessage('אירעה שגיאה בלתי צפויה');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -15,7 +73,11 @@ export default function ShipmentSearchScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()} 
+          style={styles.backButton}
+          disabled={loading}
+        >
           <Text style={styles.backArrow}>→</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>איתור משלוח</Text>
@@ -26,6 +88,7 @@ export default function ShipmentSearchScreen({ navigation }) {
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'manual' && styles.activeTab]}
           onPress={() => setActiveTab('manual')}
+          disabled={loading}
         >
           <Text style={[styles.tabText, activeTab === 'manual' && styles.activeTabText]}>
             הזנה ידנית 📋
@@ -35,6 +98,7 @@ export default function ShipmentSearchScreen({ navigation }) {
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'barcode' && styles.activeTab]}
           onPress={() => setActiveTab('barcode')}
+          disabled={loading}
         >
           <Text style={[styles.tabText, activeTab === 'barcode' && styles.activeTabText]}>
             סריקה ברקוד 📷
@@ -53,24 +117,47 @@ export default function ShipmentSearchScreen({ navigation }) {
             onChangeText={setShipmentNumber}
             placeholder="מספר"
             placeholderTextColor="#999"
-            keyboardType="numeric"
+            keyboardType="default"
             textAlign="center"
+            editable={!loading}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
           />
         </View>
+
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#3949AB" />
+            <Text style={styles.loadingText}>מחפש משלוח...</Text>
+          </View>
+        )}
+
+        {errorMessage && !loading && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorTitle}>שגיאה ❌</Text>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        )}
       </View>
 
       {/* Bottom Buttons */}
       <View style={styles.bottomButtons}>
         <TouchableOpacity 
-          style={[styles.button, styles.confirmButton]}
+          style={[styles.button, styles.confirmButton, loading && styles.disabledButton]}
           onPress={handleSearch}
+          disabled={loading}
         >
-          <Text style={styles.confirmButtonText}>אישור</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#333" />
+          ) : (
+            <Text style={styles.confirmButtonText}>אישור</Text>
+          )}
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={[styles.button, styles.cancelButton]}
           onPress={() => navigation.goBack()}
+          disabled={loading}
         >
           <Text style={styles.cancelButtonText}>ביטול</Text>
         </TouchableOpacity>
@@ -163,6 +250,45 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 15,
   },
+  loadingContainer: {
+    marginTop: 40,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 18,
+    color: '#3949AB',
+    fontWeight: '600',
+  },
+  errorContainer: {
+    marginTop: 30,
+    backgroundColor: '#FFEBEE',
+    borderRadius: 15,
+    padding: 20,
+    borderLeftWidth: 5,
+    borderLeftColor: '#F44336',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#C62828',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#C62828',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
   bottomButtons: {
     flexDirection: 'row',
     padding: 20,
@@ -173,9 +299,13 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   confirmButton: {
     backgroundColor: '#A8D5FF',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   cancelButton: {
     backgroundColor: '#FFFFFF',

@@ -2,15 +2,20 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
 
 export default function ShipmentDetailsScreen({ navigation, route }) {
-  const { shipmentNumber } = route.params;
+  const { shipmentData, barcode } = route.params || {};
 
-  // Mock data - in a real app, this would come from an API
-  const shipmentData = {
-    shipmentNumber: shipmentNumber,
-    recipientName: 'יוסי כהן',
-    phone: '0507654321',
-    address: 'משה דיין 55 פתח תיקווה',
-    packagesCount: 1,
+  // Display the shipment data from API
+  const renderSection = (label, value) => {
+    if (!value && value !== 0) return null;
+    
+    return (
+      <View style={styles.section}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={styles.valueBox}>
+          <Text style={styles.value}>{value}</Text>
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -20,50 +25,55 @@ export default function ShipmentDetailsScreen({ navigation, route }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backArrow}>→</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>איתור משלוח</Text>
+        <Text style={styles.headerTitle}>פרטי משלוח</Text>
       </View>
 
       {/* Content */}
       <ScrollView style={styles.content}>
-        {/* Shipment Number */}
-        <View style={styles.section}>
-          <Text style={styles.label}>מספר משלוח</Text>
-          <View style={styles.valueBox}>
-            <Text style={styles.value}>{shipmentData.shipmentNumber}</Text>
-          </View>
-        </View>
+        {/* Barcode/Shipment Number */}
+        {renderSection('מספר משלוח', shipmentData?.shipmentNumber || barcode)}
 
         {/* Recipient Name */}
-        <View style={styles.section}>
-          <Text style={styles.label}>שם הנמען</Text>
-          <View style={styles.valueBox}>
-            <Text style={styles.value}>{shipmentData.recipientName}</Text>
-          </View>
-        </View>
-
-        {/* Phone */}
-        <View style={styles.section}>
-          <Text style={styles.label}>טלפון יעד</Text>
-          <View style={styles.valueBox}>
-            <Text style={styles.value}>{shipmentData.phone}</Text>
-          </View>
-        </View>
+        {renderSection('שם הנמען', shipmentData?.recipientName)}
 
         {/* Address */}
-        <View style={styles.section}>
-          <Text style={styles.label}>כתובת יעד</Text>
-          <View style={styles.valueBox}>
-            <Text style={styles.value}>{shipmentData.address}</Text>
-          </View>
-        </View>
+        {renderSection('כתובת יעד', shipmentData?.address)}
 
-        {/* Packages Count */}
-        <View style={styles.section}>
-          <Text style={styles.label}>כמות חבילות</Text>
-          <View style={styles.valueBox}>
-            <Text style={styles.value}>{shipmentData.packagesCount}</Text>
+        {/* Exit Number */}
+        {renderSection('מספר יציאה', shipmentData?.exitNumber?.toString())}
+
+        {/* Container Code */}
+        {renderSection('קוד מכולה', shipmentData?.containerCode)}
+
+        {/* Distribution Point */}
+        {renderSection('נקודת חלוקה', shipmentData?.distributionPoint)}
+
+        {/* Branch */}
+        {renderSection('סניף', shipmentData?.branch)}
+
+        {/* Line */}
+        {renderSection('קו', shipmentData?.line)}
+
+        {/* Sector */}
+        {renderSection('סקטור', shipmentData?.sector)}
+
+        {/* Success Message */}
+        {shipmentData?.success && !shipmentData?.errorMessage && (
+          <View style={[styles.section, styles.messageSection]}>
+            <View style={[styles.valueBox, styles.successBox]}>
+              <Text style={styles.successText}>משלוח נמצא במערכת</Text>
+            </View>
           </View>
-        </View>
+        )}
+
+        {/* Error Message */}
+        {shipmentData?.errorMessage && (
+          <View style={[styles.section, styles.messageSection]}>
+            <View style={[styles.valueBox, styles.errorBox]}>
+              <Text style={styles.errorText}>{shipmentData.errorMessage}</Text>
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {/* Bottom Buttons */}
@@ -72,14 +82,14 @@ export default function ShipmentDetailsScreen({ navigation, route }) {
           style={[styles.button, styles.confirmButton]}
           onPress={() => navigation.navigate('Home')}
         >
-          <Text style={styles.confirmButtonText}>אישור</Text>
+          <Text style={styles.confirmButtonText}>חזרה לדף הבית</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={[styles.button, styles.cancelButton]}
-          onPress={() => navigation.navigate('Home')}
+          style={[styles.button, styles.searchButton]}
+          onPress={() => navigation.navigate('ShipmentSearch')}
         >
-          <Text style={styles.cancelButtonText}>ביטול</Text>
+          <Text style={styles.searchButtonText}>חיפוש נוסף</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -118,19 +128,22 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 15,
+  },
+  messageSection: {
+    marginTop: 10,
   },
   label: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 10,
+    color: '#555',
+    textAlign: 'right',
+    marginBottom: 8,
   },
   valueBox: {
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
-    padding: 18,
+    padding: 15,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -141,9 +154,31 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   value: {
-    fontSize: 20,
+    fontSize: 18,
     color: '#000',
+    textAlign: 'right',
+  },
+  successBox: {
+    backgroundColor: '#E8F5E9',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  successText: {
+    fontSize: 16,
+    color: '#2E7D32',
     textAlign: 'center',
+    fontWeight: '600',
+  },
+  errorBox: {
+    backgroundColor: '#FFEBEE',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F44336',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#C62828',
+    textAlign: 'center',
+    fontWeight: '600',
   },
   bottomButtons: {
     flexDirection: 'row',
@@ -157,21 +192,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmButton: {
-    backgroundColor: '#A8D5FF',
+    backgroundColor: '#4CAF50',
   },
-  cancelButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#3949AB',
+  searchButton: {
+    backgroundColor: '#2196F3',
   },
   confirmButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#FFFFFF',
   },
-  cancelButtonText: {
-    fontSize: 18,
+  searchButtonText: {
+    fontSize: 16,
     fontWeight: '600',
-    color: '#3949AB',
+    color: '#FFFFFF',
   },
 });
