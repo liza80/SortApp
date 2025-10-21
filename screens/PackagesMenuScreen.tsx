@@ -1,7 +1,15 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView } from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../App';
 
-export default function HomeScreen({ navigation }) {
+type PackagesMenuScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PackagesMenu'>;
+
+interface PackagesMenuScreenProps {
+  navigation: PackagesMenuScreenNavigationProp;
+}
+
+export default function PackagesMenuScreen({ navigation }: PackagesMenuScreenProps) {
   // Get today's date
   const today = new Date();
   const day = String(today.getDate()).padStart(2, '0');
@@ -20,37 +28,33 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
         <Text style={styles.date}>{todayDate}</Text>
-        <Text style={styles.greeting}>שלום ליזה</Text>
+        <Text style={styles.greeting}>שלום איימי</Text>
       </View>
 
       {/* Main Content */}
       <View style={styles.content}>
-        {/* HUB Card */}
+        {/* Title Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>מרכז מיון HUB</Text>
+          <Text style={styles.cardTitle}>מארזים</Text>
           <TouchableOpacity style={styles.inputButton}>
-            <Text style={styles.inputButtonText}>מה תרצה לעשות היום?</Text>
+            <Text style={styles.inputButtonText}>בחר את הפעילה המבוקשת</Text>
           </TouchableOpacity>
         </View>
 
         {/* Action Buttons */}
-        <TouchableOpacity style={[styles.actionButton, styles.yellowButton]}>
-          <Text style={styles.actionButtonText}>מארזים</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.actionButton, styles.orangeButton]}>
-          <Text style={styles.actionButtonText}>ברקוד</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity 
-          style={[styles.actionButton, styles.blueButton]}
-          onPress={() => navigation.navigate('ShipmentSearch')}
+          style={[styles.actionButton, styles.yellowButton]}
+          onPress={() => navigation.navigate('EventClosure')}
         >
-          <Text style={styles.actionButtonText}>איתור משלוח</Text>
+          <Text style={styles.actionButtonText}>סגירת מארזים</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.actionButton, styles.grayButton]}>
-          <Text style={styles.actionButtonText}>שאטלים</Text>
+        <TouchableOpacity style={[styles.actionButton, styles.blueButton]}>
+          <Text style={styles.actionButtonText}>הקמת מארז חדש</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.actionButton, styles.blackButton]}>
+          <Text style={styles.actionButtonText}>חביקה על הרציפה</Text>
         </TouchableOpacity>
       </View>
 
@@ -66,7 +70,10 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.navLabel}>אזור אישי</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
+        <TouchableOpacity 
+          style={[styles.navItem, styles.navItemActive]}
+          onPress={() => navigation.navigate('Home')}
+        >
           <Text style={styles.navIconActive}>🏠</Text>
           <Text style={styles.navLabelActive}>בית</Text>
         </TouchableOpacity>
@@ -168,19 +175,16 @@ const styles = StyleSheet.create({
   yellowButton: {
     backgroundColor: '#FFD700',
   },
-  orangeButton: {
-    backgroundColor: '#FF8C42',
-  },
   blueButton: {
-    backgroundColor: '#0088CC',
+    backgroundColor: '#5CB3FF',
   },
-  grayButton: {
-    backgroundColor: '#5A5A5A',
+  blackButton: {
+    backgroundColor: '#2C2C2C',
   },
   actionButtonText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#000',
   },
   bottomNav: {
     flexDirection: 'row',

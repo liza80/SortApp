@@ -1,11 +1,23 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
+import { RootStackParamList } from '../App';
+import { ShipmentData } from '../types/api.types';
 
-export default function ShipmentDetailsScreen({ navigation, route }) {
+type ShipmentDetailsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShipmentDetails'>;
+type ShipmentDetailsScreenRouteProp = RouteProp<RootStackParamList, 'ShipmentDetails'>;
+
+interface ShipmentDetailsScreenProps {
+  navigation: ShipmentDetailsScreenNavigationProp;
+  route: ShipmentDetailsScreenRouteProp;
+}
+
+export default function ShipmentDetailsScreen({ navigation, route }: ShipmentDetailsScreenProps) {
   const { shipmentData, barcode } = route.params || {};
 
   // Display the shipment data from API
-  const renderSection = (label, value) => {
+  const renderSection = (label: string, value: string | number | undefined) => {
     if (!value && value !== 0) return null;
     
     return (

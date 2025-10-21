@@ -1,12 +1,23 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../App';
 import { sortingAPI } from '../config/api';
+import { AxiosError } from 'axios';
 
-export default function ShipmentSearchScreen({ navigation }) {
-  const [activeTab, setActiveTab] = useState('manual');
-  const [shipmentNumber, setShipmentNumber] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+type ShipmentSearchScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShipmentSearch'>;
+
+interface ShipmentSearchScreenProps {
+  navigation: ShipmentSearchScreenNavigationProp;
+}
+
+type TabType = 'manual' | 'barcode';
+
+export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScreenProps) {
+  const [activeTab, setActiveTab] = useState<TabType>('manual');
+  const [shipmentNumber, setShipmentNumber] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const handleSearch = async () => {
     if (!shipmentNumber.trim()) {
@@ -38,16 +49,18 @@ export default function ShipmentSearchScreen({ navigation }) {
       console.error('Error searching shipment:', error);
       
       // Handle different error types
-      if (error.response) {
+      const axiosError = error as AxiosError<any>;
+      
+      if (axiosError.response) {
         // Server responded with error status (including 404)
-        const status = error.response.status;
+        const status = axiosError.response.status;
         let errMsg = 'שגיאה בשרת';
         
         // Try to extract error message from response
-        if (error.response.data) {
-          errMsg = error.response.data.data?.errorMessage || 
-                   error.response.data.errorMessage ||
-                   error.response.data.message || 
+        if (axiosError.response.data) {
+          errMsg = axiosError.response.data.data?.errorMessage || 
+                   axiosError.response.data.errorMessage ||
+                   axiosError.response.data.message || 
                    errMsg;
         }
         
@@ -57,7 +70,7 @@ export default function ShipmentSearchScreen({ navigation }) {
         } else {
           setErrorMessage(errMsg);
         }
-      } else if (error.request) {
+      } else if (axiosError.request) {
         // Request was made but no response
         setErrorMessage('שגיאת תקשורת - לא ניתן להתחבר לשרת');
       } else {

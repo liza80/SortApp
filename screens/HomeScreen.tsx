@@ -1,21 +1,34 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, SafeAreaView } from 'react-native';
+import React from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView } from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../App';
 
-export default function App() {
+type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
+
+interface HomeScreenProps {
+  navigation: HomeScreenNavigationProp;
+}
+
+export default function HomeScreen({ navigation }: HomeScreenProps) {
+  // Get today's date
+  const today = new Date();
+  const day = String(today.getDate()).padStart(2, '0');
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const year = String(today.getFullYear()).slice(-2);
+  const todayDate = `${day}/${month}/${year}`;
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" />
-      
       {/* Header Section */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.languageSwitch}>עב 🌐</Text>
           <View style={styles.logo}>
-            <Text style={styles.logoText}>🚚</Text>
+            <Text style={styles.logoText}>🐆</Text>
           </View>
         </View>
-        <Text style={styles.date}>27/02/24</Text>
-        <Text style={styles.greeting}>שלום אייקי</Text>
+        <Text style={styles.date}>{todayDate}</Text>
+        <Text style={styles.greeting}>שלום ליזה</Text>
       </View>
 
       {/* Main Content */}
@@ -24,17 +37,27 @@ export default function App() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>מרכז מיון HUB</Text>
           <TouchableOpacity style={styles.inputButton}>
-            <Text style={styles.inputButtonText}>מה הרצת לעשות היום?</Text>
+            <Text style={styles.inputButtonText}>מה תרצה לעשות היום?</Text>
           </TouchableOpacity>
         </View>
 
         {/* Action Buttons */}
-        <TouchableOpacity style={[styles.actionButton, styles.yellowButton]}>
-          <Text style={styles.actionButtonText}>מאורים</Text>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.yellowButton]}
+          onPress={() => navigation.navigate('PackagesMenu')}
+        >
+          <Text style={styles.actionButtonText}>מארזים</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.actionButton, styles.orangeButton]}>
           <Text style={styles.actionButtonText}>ברקוד</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.blueButton]}
+          onPress={() => navigation.navigate('ShipmentSearch')}
+        >
+          <Text style={styles.actionButtonText}>איתור משלוח</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.actionButton, styles.grayButton]}>
@@ -85,15 +108,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   logo: {
-    width: 50,
-    height: 50,
+    width: 60,
+    height: 60,
     backgroundColor: '#000',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   logoText: {
-    fontSize: 30,
+    fontSize: 35,
   },
   date: {
     fontSize: 16,
@@ -158,6 +181,9 @@ const styles = StyleSheet.create({
   },
   orangeButton: {
     backgroundColor: '#FF8C42',
+  },
+  blueButton: {
+    backgroundColor: '#0088CC',
   },
   grayButton: {
     backgroundColor: '#5A5A5A',
