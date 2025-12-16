@@ -1,6 +1,6 @@
 // API Response Types
 
-export interface ShipmentData {
+export interface ShipmentDetailsResponse {
   success: boolean;
   shipmentNumber?: string;
   recipientName?: string;
@@ -11,16 +11,28 @@ export interface ShipmentData {
   branch?: string;
   line?: string;
   sector?: string;
+  vendorPhone?: string;        // טלפון יעד - NEW
+  packageQuantity?: string;    // כמות חבילות - NEW
   errorMessage?: string;
+  errorMessageHebrew?: string;
+  errorCode?: string;
+  customerName?: string;
+  currentStage?: string;
+  exitDescription?: string;
+  servicePoint?: string;
+  branchName?: string;
+  branchCode?: string;
+  segment?: string;
 }
+
+// Keep for backward compatibility
+export interface ShipmentData extends ShipmentDetailsResponse {}
 
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   errorMessage?: string;
 }
-
-export interface ShipmentDetailsResponse extends ApiResponse<ShipmentData> {}
 
 export interface ScanShipmentRequest {
   Barcode: string;

@@ -48,8 +48,14 @@ export default function ShipmentDetailsScreen({ navigation, route }: ShipmentDet
         {/* Recipient Name */}
         {renderSection('שם הנמען', shipmentData?.recipientName)}
 
+        {/* Phone Number - NEW */}
+        {renderSection('טלפון יעד', shipmentData?.vendorPhone)}
+
         {/* Address */}
         {renderSection('כתובת יעד', shipmentData?.address)}
+
+        {/* Package Quantity - NEW */}
+        {renderSection('כמות חבילות', shipmentData?.packageQuantity)}
 
         {/* Exit Number */}
         {renderSection('מספר יציאה', shipmentData?.exitNumber?.toString())}

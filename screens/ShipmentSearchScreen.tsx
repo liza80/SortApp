@@ -32,16 +32,15 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
       const response = await sortingAPI.getShipmentDetails(shipmentNumber.trim());
       
       // Check if the response was successful
-      if (response.success && response.data && response.data.success) {
+      if (response.success) {
         // Navigate to details screen with the API response
         navigation.navigate('ShipmentDetails', { 
-          shipmentData: response.data,
+          shipmentData: response,
           barcode: shipmentNumber.trim()
         });
       } else {
         // Show error message from API
-        const errMsg = response.data?.errorMessage || 
-                       response.errorMessage || 
+        const errMsg = response.errorMessage || 
                        'לא נמצאו פרטים עבור משלוח זה';
         setErrorMessage(errMsg);
       }

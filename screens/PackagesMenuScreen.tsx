@@ -28,7 +28,7 @@ export default function PackagesMenuScreen({ navigation }: PackagesMenuScreenPro
           </View>
         </View>
         <Text style={styles.date}>{todayDate}</Text>
-        <Text style={styles.greeting}>שלום איימי</Text>
+        <Text style={styles.greeting}>שלום ליזה</Text>
       </View>
 
       {/* Main Content */}

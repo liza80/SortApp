@@ -8,7 +8,7 @@ import {
 } from '../types/api.types';
 
 // API Base URL - Update this with your actual API URL
-const API_BASE_URL = 'http://localhost:5115/CourierApi/Sorting';
+const API_BASE_URL = 'https://localhost:5002/CourierApi/Sorting';
 
 // Create axios instance with default config
 const apiClient: AxiosInstance = axios.create({
@@ -28,10 +28,12 @@ export const sortingAPI = {
    */
   getShipmentDetails: async (barcode: string): Promise<ShipmentDetailsResponse> => {
     try {
-      const response = await apiClient.get<ShipmentDetailsResponse>('/GetShipmentDetails', {
+      const response = await apiClient.get<any>('/GetShipmentDetails', {
         params: { barcode }
       });
-      return response.data;
+      // API returns { success, errorMessage, data: {...} }
+      // We need to return the inner data object
+      return response.data.data || response.data;
     } catch (error) {
       console.error('Error fetching shipment details:', error);
       throw error;

@@ -108,7 +108,7 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
         >
           <Text style={styles.backArrow}>→</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>טגירת מארזים</Text>
+        <Text style={styles.headerTitle}>סגירת מארזים</Text>
       </View>
 
       {/* Tabs */}
