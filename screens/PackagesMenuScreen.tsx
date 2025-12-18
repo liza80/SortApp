@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, Image } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 
@@ -24,7 +24,11 @@ export default function PackagesMenuScreen({ navigation }: PackagesMenuScreenPro
         <View style={styles.headerTop}>
           <Text style={styles.languageSwitch}>עב 🌐</Text>
           <View style={styles.logo}>
-            <Text style={styles.logoText}>🐆</Text>
+            <Image 
+              source={require('../assets/icon.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
         </View>
         <Text style={styles.date}>{todayDate}</Text>
@@ -106,10 +110,15 @@ const styles = StyleSheet.create({
   logo: {
     width: 60,
     height: 60,
-    backgroundColor: '#000',
-    borderRadius: 10,
+    backgroundColor: '#FFD700',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   logoText: {
     fontSize: 35,

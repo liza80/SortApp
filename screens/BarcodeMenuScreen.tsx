@@ -3,13 +3,13 @@ import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, Image } from 'r
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 
-type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
+type BarcodeMenuScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'BarcodeMenu'>;
 
-interface HomeScreenProps {
-  navigation: HomeScreenNavigationProp;
+interface BarcodeMenuScreenProps {
+  navigation: BarcodeMenuScreenNavigationProp;
 }
 
-export default function HomeScreen({ navigation }: HomeScreenProps) {
+export default function BarcodeMenuScreen({ navigation }: BarcodeMenuScreenProps) {
   // Get today's date
   const today = new Date();
   const day = String(today.getDate()).padStart(2, '0');
@@ -37,38 +37,57 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
       {/* Main Content */}
       <View style={styles.content}>
-        {/* HUB Card */}
+        {/* Title Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>מרכז מיון HUB</Text>
+          <Text style={styles.cardTitle}>ברקוד</Text>
           <TouchableOpacity style={styles.inputButton}>
-            <Text style={styles.inputButtonText}>מה תרצה לעשות היום?</Text>
+            <Text style={styles.inputButtonText}>בחר את הפעילה המבוקשת</Text>
           </TouchableOpacity>
         </View>
 
         {/* Action Buttons */}
         <TouchableOpacity 
-          style={[styles.actionButton, styles.yellowButton]}
-          onPress={() => navigation.navigate('PackagesMenu')}
-        >
-          <Text style={styles.actionButtonText}>מארזים</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.orangeButton]}
-          onPress={() => navigation.navigate('BarcodeMenu')}
-        >
-          <Text style={styles.actionButtonText}>ברקוד</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
           style={[styles.actionButton, styles.blueButton]}
-          onPress={() => navigation.navigate('ShipmentSearch')}
+          onPress={() => navigation.navigate('BarcodeScan', {
+            title: 'כניסה למרכז מיון',
+            count: 83,
+            headerColor: '#0066CC'
+          })}
         >
-          <Text style={styles.actionButtonText}>איתור משלוח</Text>
+          <Text style={styles.actionButtonText}>כניסה למרכז מיון (83)</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.actionButton, styles.grayButton]}>
-          <Text style={styles.actionButtonText}>שאטלים</Text>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.grayButton]}
+          onPress={() => navigation.navigate('BarcodeScan', {
+            title: 'ביקורת מחסן',
+            count: 53,
+            headerColor: '#9E9E9E'
+          })}
+        >
+          <Text style={styles.actionButtonText}>ביקורת מחסן (53)</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.greenButton]}
+          onPress={() => navigation.navigate('BarcodeScan', {
+            title: 'סריקת מיין במה',
+            count: 600,
+            headerColor: '#00A651'
+          })}
+        >
+          <Text style={styles.actionButtonText}>סריקת מיין במה (600)</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.blackButton]}
+          onPress={() => navigation.navigate('BarcodeScan', {
+            title: 'איתור משלוח מיין',
+            count: 109,
+            headerColor: '#2C2C2C'
+          })}
+        >
+          <Text style={styles.actionButtonText}>איתור משלוח מיין (109)</Text>
         </TouchableOpacity>
       </View>
 
@@ -84,7 +103,10 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.navLabel}>אזור אישי</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
+        <TouchableOpacity 
+          style={[styles.navItem, styles.navItemActive]}
+          onPress={() => navigation.navigate('Home')}
+        >
           <Text style={styles.navIconActive}>🏠</Text>
           <Text style={styles.navLabelActive}>בית</Text>
         </TouchableOpacity>
@@ -126,9 +148,6 @@ const styles = StyleSheet.create({
   logoImage: {
     width: '100%',
     height: '100%',
-  },
-  logoText: {
-    fontSize: 35,
   },
   date: {
     fontSize: 16,
@@ -188,17 +207,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  yellowButton: {
-    backgroundColor: '#FFD700',
-  },
-  orangeButton: {
-    backgroundColor: '#FF8C42',
-  },
   blueButton: {
-    backgroundColor: '#0088CC',
+    backgroundColor: '#0066CC',
   },
   grayButton: {
-    backgroundColor: '#5A5A5A',
+    backgroundColor: '#9E9E9E',
+  },
+  greenButton: {
+    backgroundColor: '#00A651',
+  },
+  blackButton: {
+    backgroundColor: '#2C2C2C',
   },
   actionButtonText: {
     fontSize: 20,

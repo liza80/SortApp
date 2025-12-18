@@ -106,6 +106,30 @@ export const sortingAPI = {
       console.error('Error validating worker session:', error);
       throw error;
     }
+  },
+
+  /**
+   * Scan barcode with statistics
+   * @param request - Barcode scan request
+   * @returns Barcode scan response with statistics
+   */
+  scanBarcode: async (request: {
+    sessionId: number;
+    controlCode: number;
+    driverId: number;
+    barcode: string;
+    latitude?: string;
+    longitude?: string;
+    isFirstEntry?: boolean;
+    isManualEntry?: boolean;
+  }): Promise<any> => {
+    try {
+      const response = await apiClient.post<any>('/ScanBarcode', request);
+      return response.data.data || response.data;
+    } catch (error) {
+      console.error('Error scanning barcode:', error);
+      throw error;
+    }
   }
 };
 

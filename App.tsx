@@ -8,10 +8,18 @@ import ShipmentSearchScreen from './screens/ShipmentSearchScreen';
 import ShipmentDetailsScreen from './screens/ShipmentDetailsScreen';
 import EventClosureScreen from './screens/EventClosureScreen';
 import PackagesMenuScreen from './screens/PackagesMenuScreen';
+import BarcodeMenuScreen from './screens/BarcodeMenuScreen';
+import BarcodeScanScreen from './screens/BarcodeScanScreen';
 
 export type RootStackParamList = {
   Home: undefined;
   PackagesMenu: undefined;
+  BarcodeMenu: undefined;
+  BarcodeScan: {
+    title: string;
+    count: number;
+    headerColor: string;
+  };
   EventClosure: undefined;
   ShipmentSearch: undefined;
   ShipmentDetails: {
@@ -34,6 +42,8 @@ export default function App() {
       >
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="PackagesMenu" component={PackagesMenuScreen} />
+        <Stack.Screen name="BarcodeMenu" component={BarcodeMenuScreen} />
+        <Stack.Screen name="BarcodeScan" component={BarcodeScanScreen} />
         <Stack.Screen name="EventClosure" component={EventClosureScreen} />
         <Stack.Screen name="ShipmentSearch" component={ShipmentSearchScreen} />
         <Stack.Screen name="ShipmentDetails" component={ShipmentDetailsScreen} />
