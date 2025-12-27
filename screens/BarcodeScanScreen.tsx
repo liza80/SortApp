@@ -1,9 +1,24 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, Platform, ScrollView } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
-import { sortingAPI } from '../config/api';
+import { sortingAPI, shipmentsAPI, operationalAppAPI } from '../config/api';
+import { Shipment } from '../types/api.types';
+
+// Conditionally import AppBarcodeScanner only on native platforms
+// Wrapped in try-catch to handle Expo Go which doesn't support VisionCamera
+let AppBarcodeScanner: any = null;
+let isScannerAvailable = false;
+if (Platform.OS !== 'web') {
+  try {
+    AppBarcodeScanner = require('../components/AppBarcodeScanner').default;
+    isScannerAvailable = true;
+  } catch (error) {
+    console.warn('VisionCamera not available (Expo Go). Use manual input instead.', error);
+    isScannerAvailable = false;
+  }
+}
 
 type BarcodeScanScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'BarcodeScan'>;
 type BarcodeScanScreenRouteProp = RouteProp<RootStackParamList, 'BarcodeScan'>;
@@ -15,11 +30,20 @@ interface BarcodeScanScreenProps {
 
 export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScreenProps) {
   const { title, count, headerColor } = route.params;
-  const [scanMode, setScanMode] = useState<'manual' | 'barcode'>('barcode');
+  // Default to manual mode on web or when scanner unavailable
+  const isWeb = Platform.OS === 'web';
+  const canUseScanner = !isWeb && isScannerAvailable;
+  const [scanMode, setScanMode] = useState<'manual' | 'barcode'>('manual');
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [shipmentData, setShipmentData] = useState<Shipment | null>(null);
   const [error, setError] = useState<string>('');
+
+  const handleBarcodeScanned = async (code: string) => {
+    setInputValue(code);
+    await handleConfirm();
+  };
 
   const handleConfirm = async () => {
     if (!inputValue.trim()) {
@@ -30,28 +54,56 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
     setLoading(true);
     setError('');
     setResult(null);
+    setShipmentData(null);
 
     try {
-      const data = await sortingAPI.scanBarcode({
-        sessionId: 6001,
-        controlCode: count,
-        driverId: 6001,
-        barcode: inputValue,
-        latitude: '',
-        longitude: '',
-        isFirstEntry: false,
-        isManualEntry: scanMode === 'manual'
-      });
+      // First, fetch shipment data from OperationalApp
+      console.log('Fetching shipment data for:', inputValue);
+      const shipmentResponse = await operationalAppAPI.getShipmentByNumber(inputValue);
+      console.log('Shipment response:', shipmentResponse);
       
-      if (data.success) {
-        setResult(data);
-        setInputValue(''); // Clear for next scan
+      if (shipmentResponse.success && shipmentResponse.data && shipmentResponse.data.length > 0) {
+        // Store shipment data
+        console.log('Shipment data found:', shipmentResponse.data[0]);
+        setShipmentData(shipmentResponse.data[0]);
+        
+        // Then, update operations with RunRequestDTO structure
+        const data = await shipmentsAPI.updateOperations([{
+          EventCode: count, // 83, 53, 600, or 109
+          MsgDateTime: new Date().toISOString(),
+          MsgData: {
+            DriverId: 6001,
+            ShipmentsList: [{
+              ShipmentId: inputValue,
+              ActualQuantity: 1,
+              IsScan: scanMode === 'barcode' // true if barcode scan, false if manual
+            }],
+            Coordinates: ''
+          }
+        }]);
+        
+        if (data.success) {
+          setResult({
+            success: true,
+            message: 'ברקוד נסרק בהצלחה',
+            shipmentQuantity: 1,
+            errorQuantity: 0,
+            containerQuantity: 0,
+            lastBarcode: inputValue
+          });
+          // Don't clear input immediately so user can see what was scanned
+          // setInputValue('');
+        } else {
+          setError('שגיאה בסריקת ברקוד');
+        }
       } else {
-        setError(data.message || 'שגיאה בסריקת ברקוד');
+        console.log('No shipment found or error:', shipmentResponse);
+        setError(shipmentResponse.errorMessage || 'לא נמצא משלוח');
       }
     } catch (err: any) {
-      setError('שגיאת תקשורת עם השרת');
-      console.error('Scan error:', err);
+      console.error('Scan error details:', err);
+      console.error('Error response:', err.response?.data);
+      setError(`שגיאת תקשורת עם השרת: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -94,35 +146,59 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
         <TouchableOpacity
           style={[
             styles.toggleButton,
-            scanMode === 'barcode' && styles.toggleButtonActive
+            scanMode === 'barcode' && styles.toggleButtonActive,
+            !canUseScanner && styles.toggleButtonDisabled
           ]}
-          onPress={() => setScanMode('barcode')}
+          onPress={() => {
+            if (canUseScanner) {
+              setScanMode('barcode');
+            }
+          }}
+          disabled={!canUseScanner}
         >
           <Text style={[
             styles.toggleButtonText,
-            scanMode === 'barcode' && styles.toggleButtonTextActive
+            scanMode === 'barcode' && styles.toggleButtonTextActive,
+            !canUseScanner && styles.toggleButtonTextDisabled
           ]}>
-            🔍 סריקת ברקוד
+            🔍 סריקת ברקוד {!canUseScanner && (isWeb ? '(לא זמין באתר)' : '(לא זמין ב-Expo Go)')}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* Main Content */}
-      <View style={styles.content}>
-        <Text style={styles.contentTitle}>הקלד/סרוק חבילה או שק</Text>
-        
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>מספר</Text>
-          <TextInput
-            style={styles.input}
-            value={inputValue}
-            onChangeText={setInputValue}
-            placeholder=""
-            keyboardType="default"
-            autoFocus={true}
-            editable={!loading}
-          />
-        </View>
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {scanMode === 'barcode' && canUseScanner ? (
+          <View style={styles.scannerContainer}>
+            <AppBarcodeScanner
+              onBarcodeScanned={(code: string) => {
+                setInputValue(code);
+                handleConfirm();
+              }}
+              handleNoPermission={() => {
+                setError('אין הרשאת מצלמה. עבור להזנה ידנית.');
+                setScanMode('manual');
+              }}
+            />
+          </View>
+        ) : (
+          <>
+            <Text style={styles.contentTitle}>הקלד/סרוק חבילה או שק</Text>
+            
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>מספר</Text>
+              <TextInput
+                style={styles.input}
+                value={inputValue}
+                onChangeText={setInputValue}
+                placeholder=""
+                keyboardType="default"
+                autoFocus={true}
+                editable={!loading}
+              />
+            </View>
+          </>
+        )}
 
         {/* Loading State */}
         {loading && (
@@ -138,37 +214,80 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
           </View>
         )}
 
-        {/* Results Display */}
-        {result && !error && (
-          <View style={styles.resultContainer}>
-            <Text style={styles.resultTitle}>✅ {result.message}</Text>
+        {/* Shipment Data Display */}
+        {shipmentData && !error && result && (
+          <View style={styles.shipmentDataContainer}>
+            <Text style={styles.shipmentDataTitle}>📦 פרטי משלוח</Text>
             
-            <View style={styles.statsGrid}>
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>משלוחים</Text>
-                <Text style={styles.statValue}>{result.shipmentQuantity || 0}</Text>
-              </View>
-              
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>שגויים</Text>
-                <Text style={styles.statValue}>{result.errorQuantity || 0}</Text>
-              </View>
-              
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>מארזים</Text>
-                <Text style={styles.statValue}>{result.containerQuantity || 0}</Text>
-              </View>
+            <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataValue}>{shipmentData.shipmentId}</Text>
+              <Text style={styles.shipmentDataLabel}>מספר משלוח:</Text>
             </View>
 
-            {result.lastBarcode && (
-              <View style={styles.lastBarcodeContainer}>
-                <Text style={styles.lastBarcodeLabel}>ברקוד אחרון:</Text>
-                <Text style={styles.lastBarcodeValue}>{result.lastBarcode}</Text>
+            {shipmentData.customerName && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataValue}>{shipmentData.customerName}</Text>
+                <Text style={styles.shipmentDataLabel}>שם לקוח:</Text>
+              </View>
+            )}
+
+            {shipmentData.destinationAddress && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataValue}>{shipmentData.destinationAddress}</Text>
+                <Text style={styles.shipmentDataLabel}>כתובת יעד:</Text>
+              </View>
+            )}
+
+            {shipmentData.consigneePhone && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataValue}>{shipmentData.consigneePhone}</Text>
+                <Text style={styles.shipmentDataLabel}>טלפון:</Text>
+              </View>
+            )}
+
+            <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataValue}>{shipmentData.distributionLine}</Text>
+              <Text style={styles.shipmentDataLabel}>קו הפצה:</Text>
+            </View>
+
+            <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataValue}>{shipmentData.distributionArea}</Text>
+              <Text style={styles.shipmentDataLabel}>אזור הפצה:</Text>
+            </View>
+
+            {shipmentData.distributionSegment && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataValue}>{shipmentData.distributionSegment}</Text>
+                <Text style={styles.shipmentDataLabel}>מגזר:</Text>
+              </View>
+            )}
+
+            <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataValue}>{shipmentData.actualQuantity}</Text>
+              <Text style={styles.shipmentDataLabel}>כמות בפועל:</Text>
+            </View>
+
+            <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataValue}>{shipmentData.scannedQuantity}</Text>
+              <Text style={styles.shipmentDataLabel}>כמות נסרקה:</Text>
+            </View>
+
+            {shipmentData.sourceName && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataValue}>{shipmentData.sourceName}</Text>
+                <Text style={styles.shipmentDataLabel}>שם מקור:</Text>
+              </View>
+            )}
+
+            {shipmentData.pccId && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataValue}>{shipmentData.pccId}</Text>
+                <Text style={styles.shipmentDataLabel}>PCC:</Text>
               </View>
             )}
           </View>
         )}
-      </View>
+      </ScrollView>
 
       {/* Bottom Buttons */}
       <View style={styles.bottomButtons}>
@@ -243,9 +362,23 @@ const styles = StyleSheet.create({
   toggleButtonTextActive: {
     color: '#FFFFFF',
   },
+  toggleButtonDisabled: {
+    backgroundColor: '#E0E0E0',
+    borderColor: '#B0B0B0',
+    opacity: 0.6,
+  },
+  toggleButtonTextDisabled: {
+    color: '#999',
+  },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     padding: 20,
+    paddingBottom: 40,
+  },
+  scannerContainer: {
+    flex: 1,
   },
   contentTitle: {
     fontSize: 20,
@@ -385,5 +518,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+  },
+  shipmentDataContainer: {
+    marginTop: 15,
+    padding: 20,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 15,
+  },
+  shipmentDataTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1565C0',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  shipmentDataRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#BBDEFB',
+  },
+  shipmentDataLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#424242',
+    flex: 1,
+  },
+  shipmentDataValue: {
+    fontSize: 14,
+    color: '#1565C0',
+    flex: 1,
+    textAlign: 'right',
+    fontWeight: '500',
   },
 });

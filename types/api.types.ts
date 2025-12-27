@@ -47,3 +47,60 @@ export interface FloorPackageRequest {
   packageId: string;
   location: string;
 }
+
+// Shipment model from OperationalApp
+export interface Shipment {
+  shipmentId: number;
+  shipmentType: number;
+  shipmentRef1?: string;
+  shipmentRef2?: string;
+  distributionLine: number;
+  distributionArea: number;
+  distributionSegment?: number;
+  driverId: number;
+  customerName?: string;
+  consigneePhone: number;
+  additionalPhone?: number;
+  destinationAddress?: string;
+  addressRemarks?: string;
+  actualQuantity: number;
+  scannedQuantity: number;
+  weightType: boolean;
+  udr: boolean;
+  swapShipmentNumber?: number;
+  codType?: boolean;
+  codSum?: number;
+  codCheckDate?: string;
+  sourceName?: string;
+  shipmentListingTimestamp?: string;
+  shipmentUpdateTimestamp: string;
+  signedForBy?: string;
+  shipmentClosureCode?: number;
+  actualDropoffIndex?: number;
+  consigneeRemarks?: string;
+  pccId?: string;
+  deliveryTimeRange?: string;
+  pudoId?: number;
+  customerEmail?: string;
+  destinationCityCode: string;
+  destinationStreetCode: string;
+  destinationBuildingNo: number;
+  shipmentStatus: number;
+  sourceAddress: string;
+  sourcePhone: number;
+  sourceSecondPhone: number;
+  contactlessDelivery?: number;
+  sourceBuildingNo?: number;
+  sourceStreetCode?: string;
+  sourceCityCode?: string;
+  sourceEntrance?: string;
+  destinationEntrance?: string;
+  confirmationCode?: number;
+  statusUpdateTime?: string;
+}
+
+export interface GetShipmentResponse {
+  success: boolean;
+  data?: Shipment[];
+  errorMessage?: string;
+}
