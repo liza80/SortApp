@@ -278,20 +278,6 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
               <Text style={styles.shipmentDataLabel}>נקודת חלוקה:</Text>
             </View>
 
-            {shipmentResponseData.isWrongStatus && (
-              <View style={styles.shipmentDataRow}>
-                <Text style={[styles.shipmentDataValue, styles.warningText]}>⚠️ כן</Text>
-                <Text style={styles.shipmentDataLabel}>סטטוס שגוי:</Text>
-              </View>
-            )}
-
-            {shipmentResponseData.isDelayedShipment && (
-              <View style={styles.shipmentDataRow}>
-                <Text style={[styles.shipmentDataValue, styles.warningText]}>⚠️ כן</Text>
-                <Text style={styles.shipmentDataLabel}>משלוח מעוכב:</Text>
-              </View>
-            )}
-
             {shipmentResponseData.pudo && (
               <>
                 <Text style={styles.sectionTitle}>📍 נקודת איסוף (PUDO)</Text>
