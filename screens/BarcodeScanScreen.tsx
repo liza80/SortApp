@@ -305,6 +305,14 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
               <Text style={styles.shipmentDataLabel}>סניף נהג:</Text>
             </View>
 
+            <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataValue}>
+                {shipmentResponseData.pudo?.pudoName || 
+                 (shipmentResponseData.shipment.pudoId ? shipmentResponseData.shipment.pudoId.toString() : '0')}
+              </Text>
+              <Text style={styles.shipmentDataLabel}>נקודת חלוקה:</Text>
+            </View>
+
             {shipmentResponseData.isWrongStatus && (
               <View style={styles.shipmentDataRow}>
                 <Text style={[styles.shipmentDataValue, styles.warningText]}>⚠️ כן</Text>
