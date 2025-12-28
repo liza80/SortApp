@@ -58,7 +58,7 @@ export default function PackagesMenuScreen({ navigation }: PackagesMenuScreenPro
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.actionButton, styles.blackButton]}>
-          <Text style={styles.actionButtonText}>חביקה על הרציפה</Text>
+          <Text style={styles.actionButtonText}>חבילה על הרצפה</Text>
         </TouchableOpacity>
       </View>
 
