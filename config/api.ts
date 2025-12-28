@@ -199,13 +199,15 @@ export const shipmentsAPI = {
 export const operationalAppAPI = {
   /**
    * Get shipment by number from OperationalApp (via CourierApi)
+   * Uses the existing FindShipmentsByID endpoint
    * @param shipmentNumber - Shipment number or barcode
    * @returns Shipment data response
    */
   getShipmentByNumber: async (shipmentNumber: string): Promise<GetShipmentResponse> => {
     try {
-      const response = await shipmentsApiClient.get<GetShipmentResponse>(
-        `/GetShipmentDetailsByNumber/${shipmentNumber}`
+      // Use existing FindShipmentsByID endpoint with isCard=false to get full shipment data
+      const response = await shipmentsApiClient.get<any>(
+        `/FindShipmentsByID/${shipmentNumber}/false`
       );
       return response.data;
     } catch (error) {

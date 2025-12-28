@@ -99,8 +99,37 @@ export interface Shipment {
   statusUpdateTime?: string;
 }
 
+// Driver Tip model
+export interface DriverTip {
+  tipId: number;
+  shipmentId: number;
+  tipText: string;
+  tipType: string;
+  createdAt?: string;
+}
+
+// Pudo Response model
+export interface PudoResponse {
+  pudoId: number;
+  pudoName: string;
+  pudoAddress: string;
+  pudoPhone?: string;
+  pudoType?: string;
+}
+
+// Shipment Response wrapper from FindShipmentsByID endpoint
+export interface ShipmentResponse {
+  shipment: Shipment;
+  driverTipList: DriverTip[];
+  destinationDriver: number;
+  driverBranch: number;
+  pudo?: PudoResponse | null;
+  isWrongStatus: boolean;
+  isDelayedShipment: boolean;
+}
+
 export interface GetShipmentResponse {
   success: boolean;
-  data?: Shipment[];
+  data?: ShipmentResponse[];
   errorMessage?: string;
 }

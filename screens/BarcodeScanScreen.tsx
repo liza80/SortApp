@@ -4,7 +4,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import { sortingAPI, shipmentsAPI, operationalAppAPI } from '../config/api';
-import { Shipment } from '../types/api.types';
+import { ShipmentResponse, Shipment, DriverTip, PudoResponse } from '../types/api.types';
 
 // Conditionally import AppBarcodeScanner only on native platforms
 // Wrapped in try-catch to handle Expo Go which doesn't support VisionCamera
@@ -37,7 +37,7 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [shipmentData, setShipmentData] = useState<Shipment | null>(null);
+  const [shipmentResponseData, setShipmentResponseData] = useState<ShipmentResponse | null>(null);
   const [error, setError] = useState<string>('');
 
   const handleBarcodeScanned = async (code: string) => {
@@ -54,7 +54,7 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
     setLoading(true);
     setError('');
     setResult(null);
-    setShipmentData(null);
+    setShipmentResponseData(null);
 
     try {
       // First, fetch shipment data from OperationalApp
@@ -63,9 +63,9 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
       console.log('Shipment response:', shipmentResponse);
       
       if (shipmentResponse.success && shipmentResponse.data && shipmentResponse.data.length > 0) {
-        // Store shipment data
+        // Store shipment response data (ShipmentResponse with additional fields)
         console.log('Shipment data found:', shipmentResponse.data[0]);
-        setShipmentData(shipmentResponse.data[0]);
+        setShipmentResponseData(shipmentResponse.data[0]);
         
         // Then, update operations with RunRequestDTO structure
         const data = await shipmentsAPI.updateOperations([{
@@ -215,75 +215,131 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
         )}
 
         {/* Shipment Data Display */}
-        {shipmentData && !error && result && (
+        {shipmentResponseData && !error && result && (
           <View style={styles.shipmentDataContainer}>
             <Text style={styles.shipmentDataTitle}>📦 פרטי משלוח</Text>
             
             <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentData.shipmentId}</Text>
+              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.shipmentId}</Text>
               <Text style={styles.shipmentDataLabel}>מספר משלוח:</Text>
             </View>
 
-            {shipmentData.customerName && (
+            {shipmentResponseData.shipment.customerName && (
               <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentData.customerName}</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.customerName}</Text>
                 <Text style={styles.shipmentDataLabel}>שם לקוח:</Text>
               </View>
             )}
 
-            {shipmentData.destinationAddress && (
+            {shipmentResponseData.shipment.destinationAddress && (
               <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentData.destinationAddress}</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.destinationAddress}</Text>
                 <Text style={styles.shipmentDataLabel}>כתובת יעד:</Text>
               </View>
             )}
 
-            {shipmentData.consigneePhone && (
+            {shipmentResponseData.shipment.consigneePhone && (
               <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentData.consigneePhone}</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.consigneePhone}</Text>
                 <Text style={styles.shipmentDataLabel}>טלפון:</Text>
               </View>
             )}
 
             <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentData.distributionLine}</Text>
+              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionLine}</Text>
               <Text style={styles.shipmentDataLabel}>קו הפצה:</Text>
             </View>
 
             <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentData.distributionArea}</Text>
+              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionArea}</Text>
               <Text style={styles.shipmentDataLabel}>אזור הפצה:</Text>
             </View>
 
-            {shipmentData.distributionSegment && (
+            {shipmentResponseData.shipment.distributionSegment && (
               <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentData.distributionSegment}</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionSegment}</Text>
                 <Text style={styles.shipmentDataLabel}>מגזר:</Text>
               </View>
             )}
 
             <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentData.actualQuantity}</Text>
+              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.actualQuantity}</Text>
               <Text style={styles.shipmentDataLabel}>כמות בפועל:</Text>
             </View>
 
             <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentData.scannedQuantity}</Text>
+              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.scannedQuantity}</Text>
               <Text style={styles.shipmentDataLabel}>כמות נסרקה:</Text>
             </View>
 
-            {shipmentData.sourceName && (
+            {shipmentResponseData.shipment.sourceName && (
               <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentData.sourceName}</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.sourceName}</Text>
                 <Text style={styles.shipmentDataLabel}>שם מקור:</Text>
               </View>
             )}
 
-            {shipmentData.pccId && (
+            {shipmentResponseData.shipment.pccId && (
               <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentData.pccId}</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.pccId}</Text>
                 <Text style={styles.shipmentDataLabel}>PCC:</Text>
               </View>
+            )}
+
+            {/* NEW DATA FROM ShipmentResponse */}
+            <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataValue}>{shipmentResponseData.destinationDriver}</Text>
+              <Text style={styles.shipmentDataLabel}>נהג יעד:</Text>
+            </View>
+
+            <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataValue}>{shipmentResponseData.driverBranch}</Text>
+              <Text style={styles.shipmentDataLabel}>סניף נהג:</Text>
+            </View>
+
+            {shipmentResponseData.isWrongStatus && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={[styles.shipmentDataValue, styles.warningText]}>⚠️ כן</Text>
+                <Text style={styles.shipmentDataLabel}>סטטוס שגוי:</Text>
+              </View>
+            )}
+
+            {shipmentResponseData.isDelayedShipment && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={[styles.shipmentDataValue, styles.warningText]}>⚠️ כן</Text>
+                <Text style={styles.shipmentDataLabel}>משלוח מעוכב:</Text>
+              </View>
+            )}
+
+            {shipmentResponseData.pudo && (
+              <>
+                <Text style={styles.sectionTitle}>📍 נקודת איסוף (PUDO)</Text>
+                <View style={styles.shipmentDataRow}>
+                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoName}</Text>
+                  <Text style={styles.shipmentDataLabel}>שם:</Text>
+                </View>
+                <View style={styles.shipmentDataRow}>
+                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoAddress}</Text>
+                  <Text style={styles.shipmentDataLabel}>כתובת:</Text>
+                </View>
+                {shipmentResponseData.pudo.pudoPhone && (
+                  <View style={styles.shipmentDataRow}>
+                    <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoPhone}</Text>
+                    <Text style={styles.shipmentDataLabel}>טלפון:</Text>
+                  </View>
+                )}
+              </>
+            )}
+
+            {shipmentResponseData.driverTipList && shipmentResponseData.driverTipList.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>💡 טיפים לנהג</Text>
+                {shipmentResponseData.driverTipList.map((tip, index) => (
+                  <View key={index} style={styles.tipContainer}>
+                    <Text style={styles.tipText}>• {tip.tipText}</Text>
+                  </View>
+                ))}
+              </>
             )}
           </View>
         )}
@@ -551,5 +607,30 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
     fontWeight: '500',
+  },
+  warningText: {
+    color: '#D32F2F',
+    fontWeight: 'bold',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1565C0',
+    marginTop: 15,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  tipContainer: {
+    backgroundColor: '#FFF9C4',
+    padding: 10,
+    marginVertical: 5,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#F57C00',
+  },
+  tipText: {
+    fontSize: 14,
+    color: '#424242',
+    lineHeight: 20,
   },
 });
