@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import { sortingAPI } from '../config/api';
+import { operationalAppAPI } from '../config/api';
 import { AxiosError } from 'axios';
 
 type ShipmentSearchScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShipmentSearch'>;
@@ -28,21 +28,41 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
     setLoading(true);
     setErrorMessage(''); // Clear previous errors
     try {
-      // Call the API to get shipment details
-      const response = await sortingAPI.getShipmentDetails(shipmentNumber.trim());
+      // Call the FindShipmentsByID API endpoint
+      const response = await operationalAppAPI.getShipmentByNumber(shipmentNumber.trim());
       
-      // Check if the response was successful
-      if (response.success) {
+      // Check if the response was successful and has data
+      if (response.success && response.data && response.data.length > 0) {
+        // Get the first shipment response from the array
+        const shipmentResponse = response.data[0];
+        const shipment = shipmentResponse.shipment;
+        const pudo = shipmentResponse.pudo;
+        
         // Navigate to details screen with the API response
         navigation.navigate('ShipmentDetails', { 
-          shipmentData: response,
+          shipmentData: {
+            success: true,
+            shipmentNumber: shipment.shipmentId?.toString() || shipmentNumber.trim(),
+            customerName: shipment.customerName || '',
+            recipientName: shipment.customerName || '',
+            address: shipment.destinationAddress || '',
+            currentStage: '', // Status mapping would need to be done based on shipmentStatus
+            exitNumber: shipment.distributionLine || 0,
+            exitDescription: shipment.distributionLine?.toString() || '',
+            distributionPoint: pudo?.pudoName || shipment.pudoId?.toString() || '',
+            servicePoint: pudo?.pudoAddress || '',
+            branchName: '',
+            branchCode: shipmentResponse.driverBranch?.toString() || '',
+            line: shipment.distributionLine?.toString() || '',
+            segment: shipment.distributionSegment?.toString() || '',
+            vendorPhone: shipment.consigneePhone?.toString() || '',
+            packageQuantity: shipment.actualQuantity?.toString() || '1',
+          },
           barcode: shipmentNumber.trim()
         });
       } else {
-        // Show error message from API
-        const errMsg = response.errorMessage || 
-                       'לא נמצאו פרטים עבור משלוח זה';
-        setErrorMessage(errMsg);
+        // Show error message - no shipments found
+        setErrorMessage('לא נמצאו פרטים עבור משלוח זה');
       }
     } catch (error) {
       console.error('Error searching shipment:', error);
@@ -53,21 +73,12 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
       if (axiosError.response) {
         // Server responded with error status (including 404)
         const status = axiosError.response.status;
-        let errMsg = 'שגיאה בשרת';
         
-        // Try to extract error message from response
-        if (axiosError.response.data) {
-          errMsg = axiosError.response.data.data?.errorMessage || 
-                   axiosError.response.data.errorMessage ||
-                   axiosError.response.data.message || 
-                   errMsg;
-        }
-        
-        // Special handling for 404
+        // Always show Hebrew error message
         if (status === 404) {
-          setErrorMessage(errMsg === 'שגיאה בשרת' ? 'משלוח לא נמצא במערכת' : errMsg);
+          setErrorMessage('משלוח לא נמצא במערכת');
         } else {
-          setErrorMessage(errMsg);
+          setErrorMessage('שגיאה בשרת');
         }
       } else if (axiosError.request) {
         // Request was made but no response

@@ -97,13 +97,21 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
           setError('שגיאה בסריקת ברקוד');
         }
       } else {
+        // Always show Hebrew message for not found shipments
         console.log('No shipment found or error:', shipmentResponse);
-        setError(shipmentResponse.errorMessage || 'לא נמצא משלוח');
+        setError('לא נמצא משלוח');
       }
     } catch (err: any) {
       console.error('Scan error details:', err);
       console.error('Error response:', err.response?.data);
-      setError(`שגיאת תקשורת עם השרת: ${err.message}`);
+      
+      // Always show Hebrew error message
+      // Check if it's a 404 (not found) error
+      if (err.response?.status === 404) {
+        setError('לא נמצא משלוח');
+      } else {
+        setError('שגיאת תקשורת עם השרת');
+      }
     } finally {
       setLoading(false);
     }
