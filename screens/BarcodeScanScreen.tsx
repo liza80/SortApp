@@ -263,47 +263,12 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
               <Text style={styles.shipmentDataLabel}>אזור הפצה:</Text>
             </View>
 
-            {shipmentResponseData.shipment.distributionSegment && (
-              <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionSegment}</Text>
-                <Text style={styles.shipmentDataLabel}>מגזר:</Text>
-              </View>
-            )}
-
-            <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.actualQuantity}</Text>
-              <Text style={styles.shipmentDataLabel}>כמות בפועל:</Text>
-            </View>
-
-            <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.scannedQuantity}</Text>
-              <Text style={styles.shipmentDataLabel}>כמות נסרקה:</Text>
-            </View>
-
-            {shipmentResponseData.shipment.sourceName && (
-              <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.sourceName}</Text>
-                <Text style={styles.shipmentDataLabel}>שם מקור:</Text>
-              </View>
-            )}
-
             {shipmentResponseData.shipment.pccId && (
               <View style={styles.shipmentDataRow}>
                 <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.pccId}</Text>
                 <Text style={styles.shipmentDataLabel}>PCC:</Text>
               </View>
             )}
-
-            {/* NEW DATA FROM ShipmentResponse */}
-            <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentResponseData.destinationDriver}</Text>
-              <Text style={styles.shipmentDataLabel}>נהג יעד:</Text>
-            </View>
-
-            <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentResponseData.driverBranch}</Text>
-              <Text style={styles.shipmentDataLabel}>סניף נהג:</Text>
-            </View>
 
             <View style={styles.shipmentDataRow}>
               <Text style={styles.shipmentDataValue}>
