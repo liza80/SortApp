@@ -58,7 +58,7 @@ export default function PackagesMenuScreen({ navigation }: PackagesMenuScreenPro
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.actionButton, styles.blackButton]}>
-          <Text style={styles.actionButtonText}>חבילה על הרצפה</Text>
+          <Text style={[styles.actionButtonText, styles.redText]}>חבילה על הרצפה</Text>
         </TouchableOpacity>
       </View>
 
@@ -194,6 +194,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#000',
+  },
+  redText: {
+    color: '#FF0000',
   },
   bottomNav: {
     flexDirection: 'row',
