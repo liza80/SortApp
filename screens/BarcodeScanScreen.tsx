@@ -227,6 +227,13 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
           <View style={styles.shipmentDataContainer}>
             <Text style={styles.shipmentDataTitle}>📦 פרטי משלוח</Text>
             
+            {/* Return Shipment Badge */}
+            {shipmentResponseData.shipment.shipmentType === 2 && (
+              <View style={styles.returnShipmentBadge}>
+                <Text style={styles.returnShipmentText}>🔄 משלוח חוזר</Text>
+              </View>
+            )}
+            
             <View style={styles.shipmentDataRow}>
               <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.shipmentId}</Text>
               <Text style={styles.shipmentDataLabel}>מספר משלוח:</Text>
@@ -253,52 +260,68 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
               </View>
             )}
 
-            <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionLine}</Text>
-              <Text style={styles.shipmentDataLabel}>קו הפצה:</Text>
-            </View>
+            {/* Show Line, Branch, and Distribution Point for return shipments (type 3) */}
+            {shipmentResponseData.shipment.shipmentType === 3 && (
+              <>
+                <View style={styles.shipmentDataRow}>
+                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionLine}</Text>
+                  <Text style={styles.shipmentDataLabel}>קו:</Text>
+                </View>
 
-            <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionArea}</Text>
-              <Text style={styles.shipmentDataLabel}>אזור הפצה:</Text>
-            </View>
+                <View style={styles.shipmentDataRow}>
+                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionArea}</Text>
+                  <Text style={styles.shipmentDataLabel}>סניף:</Text>
+                </View>
 
-            {shipmentResponseData.shipment.pccId && (
-              <View style={styles.shipmentDataRow}>
-                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.pccId}</Text>
-                <Text style={styles.shipmentDataLabel}>PCC:</Text>
-              </View>
+                <View style={styles.shipmentDataRow}>
+                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionSegment || 0}</Text>
+                  <Text style={styles.shipmentDataLabel}>נקודת חלוקה:</Text>
+                </View>
+              </>
             )}
 
-            <View style={styles.shipmentDataRow}>
-              <Text style={styles.shipmentDataValue}>
-                {shipmentResponseData.pudo?.pudoName || 
-                 (shipmentResponseData.shipment.pudoId ? shipmentResponseData.shipment.pudoId.toString() : '0')}
-              </Text>
-              <Text style={styles.shipmentDataLabel}>נקודת חלוקה:</Text>
-            </View>
-
-            {shipmentResponseData.pudo && (
+            {/* Only show PCC and PUDO for non-return shipments */}
+            {shipmentResponseData.shipment.shipmentType !== 3 && (
               <>
-                <Text style={styles.sectionTitle}>📍 נקודת איסוף (PUDO)</Text>
-                <View style={styles.shipmentDataRow}>
-                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoName}</Text>
-                  <Text style={styles.shipmentDataLabel}>שם:</Text>
-                </View>
-                <View style={styles.shipmentDataRow}>
-                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoAddress}</Text>
-                  <Text style={styles.shipmentDataLabel}>כתובת:</Text>
-                </View>
-                {shipmentResponseData.pudo.pudoPhone && (
+                {shipmentResponseData.shipment.pccId && (
                   <View style={styles.shipmentDataRow}>
-                    <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoPhone}</Text>
-                    <Text style={styles.shipmentDataLabel}>טלפון:</Text>
+                    <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.pccId}</Text>
+                    <Text style={styles.shipmentDataLabel}>PCC:</Text>
                   </View>
+                )}
+
+                <View style={styles.shipmentDataRow}>
+                  <Text style={styles.shipmentDataValue}>
+                    {shipmentResponseData.pudo?.pudoName || 
+                     (shipmentResponseData.shipment.pudoId ? shipmentResponseData.shipment.pudoId.toString() : '0')}
+                  </Text>
+                  <Text style={styles.shipmentDataLabel}>נקודת חלוקה:</Text>
+                </View>
+
+                {shipmentResponseData.pudo && (
+                  <>
+                    <Text style={styles.sectionTitle}>📍 נקודת איסוף (PUDO)</Text>
+                    <View style={styles.shipmentDataRow}>
+                      <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoName}</Text>
+                      <Text style={styles.shipmentDataLabel}>שם:</Text>
+                    </View>
+                    <View style={styles.shipmentDataRow}>
+                      <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoAddress}</Text>
+                      <Text style={styles.shipmentDataLabel}>כתובת:</Text>
+                    </View>
+                    {shipmentResponseData.pudo.pudoPhone && (
+                      <View style={styles.shipmentDataRow}>
+                        <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoPhone}</Text>
+                        <Text style={styles.shipmentDataLabel}>טלפון:</Text>
+                      </View>
+                    )}
+                  </>
                 )}
               </>
             )}
 
-            {shipmentResponseData.driverTipList && shipmentResponseData.driverTipList.length > 0 && (
+            {/* Only show driver tips for non-return shipments */}
+            {shipmentResponseData.shipment.shipmentType !== 3 && shipmentResponseData.driverTipList && shipmentResponseData.driverTipList.length > 0 && (
               <>
                 <Text style={styles.sectionTitle}>💡 טיפים לנהג</Text>
                 {shipmentResponseData.driverTipList.map((tip, index) => (
@@ -397,8 +420,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: 15,
+    paddingBottom: 20,
   },
   scannerContainer: {
     flex: 1,
@@ -543,33 +566,33 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   shipmentDataContainer: {
-    marginTop: 15,
-    padding: 20,
+    marginTop: 10,
+    padding: 12,
     backgroundColor: '#E3F2FD',
-    borderRadius: 15,
+    borderRadius: 12,
   },
   shipmentDataTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#1565C0',
     textAlign: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
   },
   shipmentDataRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: '#BBDEFB',
   },
   shipmentDataLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#424242',
     flex: 1,
   },
   shipmentDataValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#1565C0',
     flex: 1,
     textAlign: 'right',
@@ -580,24 +603,36 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#1565C0',
-    marginTop: 15,
-    marginBottom: 10,
+    marginTop: 10,
+    marginBottom: 6,
     textAlign: 'center',
   },
   tipContainer: {
     backgroundColor: '#FFF9C4',
-    padding: 10,
-    marginVertical: 5,
-    borderRadius: 8,
+    padding: 8,
+    marginVertical: 3,
+    borderRadius: 6,
     borderLeftWidth: 3,
     borderLeftColor: '#F57C00',
   },
   tipText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#424242',
-    lineHeight: 20,
+    lineHeight: 18,
+  },
+  returnShipmentBadge: {
+    backgroundColor: '#FF9800',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  returnShipmentText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });
