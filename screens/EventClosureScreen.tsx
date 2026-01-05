@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, Moda
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import { sortingAPI } from '../config/api';
-import { CloseContainerRequest } from '../types/api.types';
+import { CloseContainerRequest, CloseContainerResponse } from '../types/api.types';
 
 type EventClosureScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'EventClosure'>;
 
@@ -24,6 +24,11 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
   const [successPackageId, setSuccessPackageId] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [packageCount, setPackageCount] = useState<number>(0);
+  const [distributionPointNumber, setDistributionPointNumber] = useState<number | undefined>();
+  const [distributionPointName, setDistributionPointName] = useState<string | undefined>();
+  const [lineCode, setLineCode] = useState<string | undefined>();
+  const [branchCode, setBranchCode] = useState<string | undefined>();
+  const [pointCode, setPointCode] = useState<string | undefined>();
 
   // Mock counter for demonstration
   const totalScanned = scannedItems.length;
@@ -31,16 +36,17 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
   const handleConfirm = async () => {
     // Validate inputs
     if (!cartonEtiquette.trim() && !cartonBarcode.trim()) {
-      setErrorMessage('הברקוד שקרית אינו תקין');
+      setErrorMessage('יש למלא את שני השדות');
       setShowErrorModal(true);
       return;
     }
 
-    const packageId = cartonEtiquette.trim() || cartonBarcode.trim();
+    const handcuffBarcode = cartonEtiquette.trim(); // PCC barcode from first field
+    const shotBarcode = cartonBarcode.trim(); // CH barcode from second field
 
     // Check if already scanned
-    if (scannedItems.includes(packageId)) {
-      setErrorMessage('הברקוד שקרית אינו תקין');
+    if (scannedItems.includes(handcuffBarcode)) {
+      setErrorMessage('האזיקון כבר נסרק');
       setShowErrorModal(true);
       return;
     }
@@ -48,21 +54,46 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
     setLoading(true);
     
     try {
-      // Call API to close container
+      // Parse exit number from the first field if it's numeric, otherwise from second field
+      let exitNum = 1; // Default
+      
+      console.log('First field (handcuffBarcode):', handcuffBarcode);
+      console.log('Second field (shotBarcode):', shotBarcode);
+      
+      // Check if first field is a number (exit number) instead of PCC barcode
+      if (!isNaN(Number(handcuffBarcode)) && handcuffBarcode.length > 0) {
+        exitNum = parseInt(handcuffBarcode, 10);
+        console.log('Using first field as exit number:', exitNum);
+      }
+      // Otherwise check if second field is a number
+      else if (!isNaN(Number(shotBarcode)) && shotBarcode.length > 0) {
+        exitNum = parseInt(shotBarcode, 10);
+        console.log('Using second field as exit number:', exitNum);
+      } else {
+        console.log('No numeric field found, using default exit:', exitNum);
+      }
+      
       const request: CloseContainerRequest = {
-        containerId: packageId,
-        timestamp: new Date().toISOString()
+        sessionId: 1,           // Placeholder - should come from worker session
+        driverId: 1,            // Placeholder - should come from logged-in driver
+        exitNumber: exitNum,    // Use parsed exit number
+        handcuffBarcode: handcuffBarcode  // First field value (could be PCC barcode or exit number)
       };
+      
+      console.log('Final request being sent:', request);
       
       const response = await sortingAPI.closeContainer(request);
       
-      if (response.success) {
+      if (response.success && response.data) {
         // Add to scanned items
-        setScannedItems([...scannedItems, packageId]);
-        setSuccessPackageId(packageId);
+        setScannedItems([...scannedItems, handcuffBarcode]);
+        setSuccessPackageId(handcuffBarcode);
         
-        // Set package count from API response (default to 0 if not provided)
-        setPackageCount(response.data?.packageCount || 0);
+        // Set package count from API response
+        setPackageCount(response.data.packageCount || 0);
+        
+        // Note: Distribution point data is not provided by the current backend API
+        // If needed, these would need to be added to the backend response
         
         setShowSuccessModal(true);
         
@@ -70,12 +101,26 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
         setCartonEtiquette('');
         setCartonBarcode('');
       } else {
-        setErrorMessage(response.errorMessage || 'שגיאה בסגירת מארז');
+        // Check for Hebrew message first, then English errorMessage, then default
+        const errorMsg = response.data?.message || 
+                        response.data?.errorMessage || 
+                        response.errorMessage || 
+                        'שגיאה בסגירת מארז';
+        setErrorMessage(errorMsg);
         setShowErrorModal(true);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error closing container:', error);
-      setErrorMessage('שגיאה בתקשורת עם השרת');
+      // CourierApi returns ResponseDTO with nested data structure
+      // The actual error is in error.response.data.data (nested)
+      const errorData = error?.response?.data?.data;
+      const errorMsg = errorData?.message ||           // Hebrew message from backend
+                      errorData?.errorMessage ||       // English error message
+                      error?.response?.data?.message || // Direct message
+                      error?.response?.data?.errorMessage || // Direct error
+                      error?.message ||                // Generic error
+                      'שגיאה בתקשורת עם השרת';
+      setErrorMessage(errorMsg);
       setShowErrorModal(true);
     } finally {
       setLoading(false);
@@ -148,28 +193,28 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
       {/* Content */}
       {activeTab === 'new' ? (
         <View style={styles.content}>
-          {/* Carton Etiquette Section */}
+          {/* Handcuff Barcode Section (PCC) */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>סרוק אזיקון</Text>
             <TextInput
               style={styles.input}
               value={cartonEtiquette}
               onChangeText={setCartonEtiquette}
-              placeholder="מספר אייקון"
+              placeholder="PCC12345678"
               placeholderTextColor="#999"
               textAlign="center"
               returnKeyType="next"
             />
           </View>
 
-          {/* Carton Barcode Section */}
+          {/* Shot Barcode Section (CH) */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>סרוק ברקוד-שוט</Text>
             <TextInput
               style={styles.input}
               value={cartonBarcode}
               onChangeText={setCartonBarcode}
-              placeholder="מספר ייצאה"
+              placeholder="CH25201"
               placeholderTextColor="#999"
               textAlign="center"
               returnKeyType="done"
@@ -259,11 +304,44 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
               מארז {successPackageId} נסגר בהצלחה!
             </Text>
             
+            {/* Distribution Point Information */}
+            {(distributionPointNumber || distributionPointName || lineCode || branchCode || pointCode) && (
+              <View style={styles.distributionInfo}>
+                {distributionPointNumber && (
+                  <Text style={styles.distributionPointTitle}>
+                    צ'יקה שופס חולון - {distributionPointNumber}
+                  </Text>
+                )}
+                {distributionPointName && !distributionPointNumber && (
+                  <Text style={styles.distributionPointTitle}>{distributionPointName}</Text>
+                )}
+                
+                {/* Location Badges */}
+                <View style={styles.badgesContainer}>
+                  {lineCode && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>קו {lineCode}</Text>
+                    </View>
+                  )}
+                  {pointCode && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>אזור הפצה {pointCode}</Text>
+                    </View>
+                  )}
+                  {branchCode && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>סניף {branchCode}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+            
             <TouchableOpacity 
               style={styles.modalButton}
               onPress={handleCloseSuccess}
             >
-              <Text style={styles.modalButtonText}>סיים</Text>
+              <Text style={styles.modalButtonText}>סיום</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -613,5 +691,37 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  distributionInfo: {
+    width: '100%',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 25,
+    alignItems: 'center',
+  },
+  distributionPointTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  badge: {
+    backgroundColor: '#333',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
