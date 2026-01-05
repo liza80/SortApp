@@ -1,12 +1,13 @@
 import { useIsFocused } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Linking, Text, StyleSheet, Alert } from 'react-native';
-import {
-  Camera,
-  useCameraDevice,
-  useCameraPermission,
-  useCodeScanner,
-} from 'react-native-vision-camera';
+import { View, TouchableOpacity, Linking, Text, StyleSheet, Alert, TextInput } from 'react-native';
+// Temporarily commented out vision-camera imports
+// import {
+//   Camera,
+//   useCameraDevice,
+//   useCameraPermission,
+//   useCodeScanner,
+// } from 'react-native-vision-camera';
 
 export enum TorchMode {
   OFF = 'off',
@@ -23,19 +24,29 @@ const AppBarcodeScanner: React.FC<AppBarcodeScannerProps> = ({
   handleNoPermission,
 }) => {
   const isFocused = useIsFocused();
-  const { hasPermission, requestPermission } = useCameraPermission();
-  const device = useCameraDevice('back');
-
+  // Temporarily disabled camera functionality
+  // const { hasPermission, requestPermission } = useCameraPermission();
+  // const device = useCameraDevice('back');
+  const hasPermission = false; // Temporarily set to false
+  const device = null; // Temporarily set to null
+  
   const [torch, setTorch] = useState<TorchMode>(TorchMode.OFF);
   const [isScanned, setIsScanned] = useState(false);
+  const [manualBarcode, setManualBarcode] = useState('');
 
   const checkCameraPermission = async () => {
-    if (!hasPermission) {
-      const permission = await requestPermission();
-      if (!permission && handleNoPermission) {
-        handleNoPermission();
-      }
-    }
+    // Temporarily disabled
+    // if (!hasPermission) {
+    //   const permission = await requestPermission();
+    //   if (!permission && handleNoPermission) {
+    //     handleNoPermission();
+    //   }
+    // }
+  };
+  
+  const requestPermission = async () => {
+    // Placeholder function
+    return false;
   };
 
   useEffect(() => {
@@ -52,29 +63,29 @@ const AppBarcodeScanner: React.FC<AppBarcodeScannerProps> = ({
     }
   }, [isFocused]);
 
-  const codeScanner = useCodeScanner({
-    codeTypes: ['code-128', 'code-39', 'code-93', 'ean-13', 'ean-8', 'qr', 'pdf-417'],
-    onCodeScanned: (codes) => {
-      if (isScanned) {
-        return;
-      }
-      if (codes && codes.length > 0) {
-        setIsScanned(true);
-        for (const scannedBarcode of codes) {
-          if (scannedBarcode.value && scannedBarcode.value !== '') {
-            onBarcodeScanned(scannedBarcode.value);
-            setTimeout(() => setIsScanned(false), 1000);
-            break;
-          }
-        }
-      }
-    },
-  });
+  // Temporarily disabled code scanner
+  // const codeScanner = useCodeScanner({
+  //   codeTypes: ['code-128', 'code-39', 'code-93', 'ean-13', 'ean-8', 'qr', 'pdf-417'],
+  //   onCodeScanned: (codes) => {
+  //     if (isScanned) {
+  //       return;
+  //     }
+  //     if (codes && codes.length > 0) {
+  //       setIsScanned(true);
+  //       for (const scannedBarcode of codes) {
+  //         if (scannedBarcode.value && scannedBarcode.value !== '') {
+  //           onBarcodeScanned(scannedBarcode.value);
+  //           setTimeout(() => setIsScanned(false), 1000);
+  //           break;
+  //         }
+  //       }
+  //     }
+  //   },
+  // });
 
+  // Temporarily disabled flash toggle
   const toggleFlash = () => {
-    if (device?.hasTorch || device?.hasFlash) {
-      setTorch(prev => (prev === TorchMode.OFF ? TorchMode.ON : TorchMode.OFF));
-    }
+    // Flash not available without camera
   };
 
   if (!hasPermission) {
@@ -102,48 +113,42 @@ const AppBarcodeScanner: React.FC<AppBarcodeScannerProps> = ({
     );
   }
 
-  if (!device) {
-    return (
-      <View style={styles.permissionContainer}>
-        <Text style={styles.permissionTitle}>מצלמה לא זמינה</Text>
-        <Text style={styles.permissionText}>
-          לא ניתן לגשת למצלמה במכשיר זה.
-        </Text>
-      </View>
-    );
-  }
-
+  // Temporary manual barcode input until camera is fixed
   return (
-    <View style={styles.cameraContainer}>
-      <View style={styles.cameraWrapper}>
-        <Camera
-          style={styles.camera}
-          device={device}
-          torch={torch}
-          isActive={isFocused}
-          codeScanner={codeScanner}
-        />
-        <View style={styles.overlay}>
-          <View style={styles.outer} />
-          <View style={styles.scannerBox}>
-            <View style={[styles.corner, styles.topLeft]} />
-            <View style={[styles.corner, styles.topRight]} />
-            <View style={[styles.corner, styles.bottomLeft]} />
-            <View style={[styles.corner, styles.bottomRight]} />
-          </View>
-          <View style={styles.outer} />
-        </View>
-        <View style={styles.instructionContainer}>
-          <Text style={styles.instructionText}>מקם את הברקוד בתוך המסגרת</Text>
-        </View>
-      </View>
-      <View style={styles.controlsContainer}>
-        <TouchableOpacity style={styles.flashButton} onPress={toggleFlash}>
-          <Text style={styles.flashButtonText}>
-            {torch === TorchMode.OFF ? '🔦 פנס כבוי' : '💡 פנס דלוק'}
-          </Text>
+    <View style={styles.permissionContainer}>
+      <Text style={styles.permissionTitle}>סורק ברקוד זמני</Text>
+      <Text style={styles.permissionText}>
+        הזן ברקוד ידנית (המצלמה אינה זמינה כרגע):
+      </Text>
+      <TextInput
+        style={styles.barcodeInput}
+        value={manualBarcode}
+        onChangeText={setManualBarcode}
+        placeholder="הזן ברקוד כאן..."
+        onSubmitEditing={() => {
+          if (manualBarcode) {
+            onBarcodeScanned(manualBarcode);
+            setManualBarcode('');
+          }
+        }}
+      />
+      <TouchableOpacity
+        style={styles.permissionButton}
+        onPress={() => {
+          if (manualBarcode) {
+            onBarcodeScanned(manualBarcode);
+            setManualBarcode('');
+          }
+        }}>
+        <Text style={styles.permissionButtonText}>סרוק</Text>
+      </TouchableOpacity>
+      {handleNoPermission && (
+        <TouchableOpacity
+          style={[styles.permissionButton, styles.cancelButton]}
+          onPress={handleNoPermission}>
+          <Text style={styles.permissionButtonText}>ביטול</Text>
         </TouchableOpacity>
-      </View>
+      )}
     </View>
   );
 };
@@ -282,6 +287,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  barcodeInput: {
+    borderWidth: 1,
+    borderColor: '#0066CC',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: 16,
+    width: '80%',
+    marginBottom: 20,
+    textAlign: 'center',
   },
 });
 

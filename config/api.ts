@@ -4,6 +4,7 @@ import {
   ShipmentDetailsResponse,
   ScanShipmentRequest,
   CloseContainerRequest,
+  CloseContainerResponse,
   FloorPackageRequest,
   ApiResponse,
   GetShipmentResponse,
@@ -116,9 +117,18 @@ export const sortingAPI = {
    * @param request - Container closure request
    * @returns API response
    */
-  closeContainer: async (request: CloseContainerRequest): Promise<ApiResponse> => {
+  closeContainer: async (request: CloseContainerRequest): Promise<ApiResponse<CloseContainerResponse>> => {
     try {
-      const response = await sortingApiClient.post<ApiResponse>('/CloseContainer', request);
+      // Convert camelCase to PascalCase for C# backend
+      // Send both HandcuffBarcode and ContainerBarcode for compatibility with RUN system
+      const backendRequest = {
+        SessionId: request.sessionId,
+        DriverId: request.driverId,
+        ExitNumber: request.exitNumber,
+        HandcuffBarcode: request.handcuffBarcode,
+        ContainerBarcode: request.handcuffBarcode  // RUN controller uses this property
+      };
+      const response = await sortingApiClient.post<ApiResponse<CloseContainerResponse>>('/CloseContainer', backendRequest);
       return response.data;
     } catch (error) {
       console.error('Error closing container:', error);

@@ -65,12 +65,12 @@ export default function PackagesMenuScreen({ navigation }: PackagesMenuScreenPro
       {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>⌕</Text>
+          <Text style={styles.navIcon}>🔍</Text>
           <Text style={styles.navLabel}>חיפוש</Text>
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>⚭</Text>
+          <Text style={styles.navIcon}>👤</Text>
           <Text style={styles.navLabel}>אזור אישי</Text>
         </TouchableOpacity>
         
@@ -78,7 +78,7 @@ export default function PackagesMenuScreen({ navigation }: PackagesMenuScreenPro
           style={[styles.navItem, styles.navItemActive]}
           onPress={() => navigation.navigate('Home')}
         >
-          <Text style={styles.navIconActive}>⌂</Text>
+          <Text style={styles.navIconActive}>🏠</Text>
           <Text style={styles.navLabelActive}>בית</Text>
         </TouchableOpacity>
       </View>

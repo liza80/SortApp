@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import HomeScreen from './screens/HomeScreen';
 import ShipmentSearchScreen from './screens/ShipmentSearchScreen';
 import ShipmentDetailsScreen from './screens/ShipmentDetailsScreen';
+import ReturnShipmentDetailsScreen from './screens/ReturnShipmentDetailsScreen';
 import EventClosureScreen from './screens/EventClosureScreen';
 import PackagesMenuScreen from './screens/PackagesMenuScreen';
 import BarcodeMenuScreen from './screens/BarcodeMenuScreen';
@@ -26,6 +27,7 @@ export type RootStackParamList = {
     shipmentData: any;
     barcode: string;
   };
+  ReturnShipmentDetails: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -47,6 +49,7 @@ export default function App() {
         <Stack.Screen name="EventClosure" component={EventClosureScreen} />
         <Stack.Screen name="ShipmentSearch" component={ShipmentSearchScreen} />
         <Stack.Screen name="ShipmentDetails" component={ShipmentDetailsScreen} />
+        <Stack.Screen name="ReturnShipmentDetails" component={ReturnShipmentDetailsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

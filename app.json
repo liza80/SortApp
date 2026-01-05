@@ -11,6 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#FFD700"
     },
+    "updates": {
+      "enabled": false
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cheetah.sortapp"
