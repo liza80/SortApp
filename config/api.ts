@@ -11,33 +11,44 @@ import {
 } from '../types/api.types';
 
 // API Base URLs Configuration
-// INSTRUCTIONS:
-// 1. For Android Emulator: Automatically uses 10.0.2.2
-// 2. For iOS/Web: Automatically uses localhost
-// 3. For Physical Device: Set PHYSICAL_DEVICE_IP to your computer's IP (e.g., 192.168.1.100)
-// 4. Make sure the port matches your CourierApi port (default is 5002)
+// PRODUCTION CONFIG: Update PRODUCTION_API_HOST with your actual production server URL
+// DEVELOPMENT CONFIG: Set PHYSICAL_DEVICE_IP to your computer's IP for testing on physical devices
 
-const PHYSICAL_DEVICE_IP = null; // Set this to your computer's IP if using a physical device
-const API_PORT = '5002';          // Change this if your API runs on a different port
-const API_PROTOCOL = 'http';      // Change to 'https' if using SSL
+const IS_PRODUCTION = false; // Set to false for development/testing with local API
+const PRODUCTION_API_HOST = 'dcz9s109vojxy.cloudfront.net'; // CloudFront distribution URL
+const PHYSICAL_DEVICE_IP = null; // For development: Set this to your computer's IP if using a physical device
+const API_PORT = '5002';          // Using localhost:5001 for local CourierApi
+const API_PROTOCOL = 'http'; // Using HTTP for local development (not HTTPS)
 
-// Automatically determine the correct host based on platform
+// Automatically determine the correct host based on environment and platform
 const getApiHost = () => {
+  if (IS_PRODUCTION) {
+    return PRODUCTION_API_HOST;
+  }
+  
+  // Development mode logic
   if (PHYSICAL_DEVICE_IP) {
     return PHYSICAL_DEVICE_IP;
   }
   
   if (Platform.OS === 'android') {
-    return '10.0.2.2'; // Android emulator uses this to access host machine's localhost
+    return '10.0.2.2'; // Android emulator uses this to access host machine
   }
   
-  return 'localhost'; // iOS and web use localhost
+  // For web development, use localhost
+  return 'localhost';
 };
 
 const API_HOST = getApiHost();
 
-const SORTING_API_BASE_URL = `${API_PROTOCOL}://${API_HOST}:${API_PORT}/CourierApi/Sorting`;
-const SHIPMENTS_API_BASE_URL = `${API_PROTOCOL}://${API_HOST}:${API_PORT}/CourierApi/Shipments`;
+// Build URL with or without port
+const buildApiUrl = (path: string) => {
+  const baseUrl = `${API_PROTOCOL}://${API_HOST}`;
+  return API_PORT ? `${baseUrl}:${API_PORT}${path}` : `${baseUrl}${path}`;
+};
+
+const SORTING_API_BASE_URL = buildApiUrl('/CourierApi/Sorting');
+const SHIPMENTS_API_BASE_URL = buildApiUrl('/CourierApi/Shipments');
 
 
 // Create axios instances with default config

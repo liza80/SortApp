@@ -135,9 +135,16 @@ export interface CloseContainerResponse {
   success: boolean;
   message: string;
   containerNumber?: number;
+  containerBarcode?: string;
   packageCount: number;
   hasError: boolean;
   errorMessage: string;
+  // Distribution point data (if available from backend)
+  distributionPoint?: string;
+  distributionPointName?: string;
+  lineCode?: string;
+  branchCode?: string;
+  areaCode?: string;
 }
 
 export interface FloorPackageRequest {

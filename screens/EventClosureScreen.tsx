@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, Modal, ScrollView, FlatList, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, Modal, ScrollView, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
-import { sortingAPI } from '../config/api';
+import { sortingAPI, operationalAppAPI } from '../config/api';
 import { CloseContainerRequest, CloseContainerResponse } from '../types/api.types';
 
 type EventClosureScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'EventClosure'>;
@@ -12,6 +12,19 @@ interface EventClosureScreenProps {
 }
 
 type TabType = 'new' | 'history';
+
+// Container Details interface for displaying closed container info
+interface ContainerDetails {
+  containerNumber?: number;
+  containerBarcode: string;
+  exitNumber: number;
+  packageCount: number;
+  distributionPointNumber?: number;
+  distributionPointName?: string;
+  lineCode?: string;
+  branchCode?: string;
+  areaCode?: string;
+}
 
 export default function EventClosureScreen({ navigation }: EventClosureScreenProps) {
   const [activeTab, setActiveTab] = useState<TabType>('new');
@@ -29,6 +42,9 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
   const [lineCode, setLineCode] = useState<string | undefined>();
   const [branchCode, setBranchCode] = useState<string | undefined>();
   const [pointCode, setPointCode] = useState<string | undefined>();
+  const [containerBarcode, setContainerBarcode] = useState<string>('');
+  const [currentContainerDetails, setCurrentContainerDetails] = useState<ContainerDetails | null>(null);
+  const [showContainerSummary, setShowContainerSummary] = useState<boolean>(false);
 
   // Mock counter for demonstration
   const totalScanned = scannedItems.length;
@@ -54,47 +70,163 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
     setLoading(true);
     
     try {
-      // Parse exit number from the first field if it's numeric, otherwise from second field
+      // Correct field assignment:
+      // First field (סרוק אזיקון): Container number or PCC barcode
+      // Second field (סרוק ברקוד-שוט): Exit number
+      
       let exitNum = 1; // Default
+      let containerIdentifier = handcuffBarcode; // Container number or PCC barcode
       
-      console.log('First field (handcuffBarcode):', handcuffBarcode);
-      console.log('Second field (shotBarcode):', shotBarcode);
+      console.log('First field (container/PCC):', handcuffBarcode);
+      console.log('Second field (exit):', shotBarcode);
       
-      // Check if first field is a number (exit number) instead of PCC barcode
-      if (!isNaN(Number(handcuffBarcode)) && handcuffBarcode.length > 0) {
-        exitNum = parseInt(handcuffBarcode, 10);
-        console.log('Using first field as exit number:', exitNum);
-      }
-      // Otherwise check if second field is a number
-      else if (!isNaN(Number(shotBarcode)) && shotBarcode.length > 0) {
+      // The SECOND field should be the exit number
+      if (!isNaN(Number(shotBarcode)) && shotBarcode.length > 0) {
         exitNum = parseInt(shotBarcode, 10);
         console.log('Using second field as exit number:', exitNum);
-      } else {
-        console.log('No numeric field found, using default exit:', exitNum);
+      }
+      // Fallback: if second field is empty but first field looks like an exit (small number)
+      else if (!isNaN(Number(handcuffBarcode)) && handcuffBarcode.length <= 4) {
+        exitNum = parseInt(handcuffBarcode, 10);
+        containerIdentifier = ''; // No container specified
+        console.log('Using first field as exit number (fallback):', exitNum);
       }
       
       const request: CloseContainerRequest = {
         sessionId: 1,           // Placeholder - should come from worker session
         driverId: 1,            // Placeholder - should come from logged-in driver
-        exitNumber: exitNum,    // Use parsed exit number
-        handcuffBarcode: handcuffBarcode  // First field value (could be PCC barcode or exit number)
+        exitNumber: exitNum,    // Exit number from second field
+        handcuffBarcode: containerIdentifier  // Container from first field
       };
       
       console.log('Final request being sent:', request);
       
       const response = await sortingAPI.closeContainer(request);
       
+      // Response is wrapped in ApiResponse with data property
       if (response.success && response.data) {
-        // Add to scanned items
-        setScannedItems([...scannedItems, handcuffBarcode]);
-        setSuccessPackageId(handcuffBarcode);
+        // DEBUG: Log what we're getting from backend
+        console.log('=== RECEIVED FROM BACKEND ===');
+        console.log('containerBarcode:', response.data.containerBarcode);
+        console.log('packageCount:', response.data.packageCount);
+        console.log('distributionPoint:', response.data.distributionPoint);
+        console.log('distributionPointName:', response.data.distributionPointName);
+        console.log('lineCode:', response.data.lineCode);
+        console.log('branchCode:', response.data.branchCode);
+        console.log('areaCode:', response.data.areaCode);
+        console.log('=== END BACKEND DATA ===');
         
-        // Set package count from API response
+        // Add to scanned items
+        const barcodeToStore = response.data.containerBarcode || handcuffBarcode;
+        setScannedItems([...scannedItems, barcodeToStore]);
+        setSuccessPackageId(barcodeToStore);
+        setContainerBarcode(barcodeToStore);
+        
+        // Set package count from API response - NO FALLBACK
         setPackageCount(response.data.packageCount || 0);
         
-        // Note: Distribution point data is not provided by the current backend API
-        // If needed, these would need to be added to the backend response
+        // Set distribution point data if available from backend - NO MOCK DATA
+        let distPointNum = exitNum;
+        if (response.data.distributionPoint) {
+          const parsedNum = parseInt(response.data.distributionPoint, 10);
+          if (!isNaN(parsedNum)) {
+            distPointNum = parsedNum;
+            setDistributionPointNumber(parsedNum);
+          }
+        }
+        if (response.data.distributionPointName) {
+          setDistributionPointName(response.data.distributionPointName);
+        }
+        if (response.data.lineCode) {
+          setLineCode(response.data.lineCode);
+        }
+        if (response.data.branchCode) {
+          setBranchCode(response.data.branchCode);
+        }
+        if (response.data.areaCode) {
+          setPointCode(response.data.areaCode);
+        }
         
+        // Call FindShipmentsByID to get additional distribution details
+        try {
+          console.log('Calling FindShipmentsByID with container barcode:', barcodeToStore);
+          const shipmentResponse = await operationalAppAPI.getShipmentByNumber(barcodeToStore);
+          
+          console.log('=== SHIPMENT RESPONSE FROM COURIER-API ===');
+          console.log('Full response:', JSON.stringify(shipmentResponse, null, 2));
+          
+          // Extract distribution information from the shipment response
+          if (shipmentResponse && shipmentResponse.success && shipmentResponse.data && shipmentResponse.data.length > 0) {
+            const firstShipmentData = shipmentResponse.data[0];
+            
+            // Check if we have a Shipment object with distribution info
+            if (firstShipmentData.shipment) {
+              const shipment = firstShipmentData.shipment;
+              
+              console.log('DistributionLine:', shipment.distributionLine);
+              console.log('DistributionArea:', shipment.distributionArea);
+              console.log('DistributionSegment:', shipment.distributionSegment);
+              
+              // Update distribution data with values from FindShipmentsByID
+              if (shipment.distributionLine) {
+                setLineCode(shipment.distributionLine.toString());
+              }
+              if (shipment.distributionArea) {
+                setPointCode(shipment.distributionArea.toString());
+              }
+              if (shipment.distributionSegment) {
+                // Use segment as additional area info if needed
+                console.log('Segment:', shipment.distributionSegment);
+              }
+            }
+            
+            // Check for Pudo info if available
+            if (firstShipmentData.pudo) {
+              const pudo = firstShipmentData.pudo;
+              console.log('PUDO Info:', pudo);
+              
+              if (pudo.pudoName) {
+                setDistributionPointName(pudo.pudoName);
+              }
+              if (pudo.pudoId) {
+                setDistributionPointNumber(pudo.pudoId);
+              }
+            }
+          }
+        } catch (shipmentError) {
+          // Don't fail the whole operation if we can't get additional details
+          console.error('Error fetching shipment details from FindShipmentsByID:', shipmentError);
+          console.log('Continuing with data from closeContainer response only');
+        }
+        
+        // DO NOT set mock data - only show what backend provides!
+        // Comment out mock data to see ONLY real data
+        /*
+        if (!response.data.distributionPoint && !response.data.distributionPointName) {
+          // Mock distribution point data matching Figma
+          setDistributionPointNumber(5432);
+          setDistributionPointName('צ\'יטה שופס חולון');
+          setLineCode('4');
+          setPointCode('12');
+          setBranchCode('480');
+        }
+        */
+        
+        // Create container details for summary view - ONLY REAL DATA
+        const containerDetails: ContainerDetails = {
+          containerNumber: response.data.containerNumber,
+          containerBarcode: barcodeToStore,
+          exitNumber: exitNum,
+          packageCount: response.data.packageCount || 0,
+          distributionPointNumber: distPointNum || exitNum,
+          distributionPointName: response.data.distributionPointName,  // NO FALLBACK - show only real data
+          lineCode: response.data.lineCode,  // NO FALLBACK
+          branchCode: response.data.branchCode,  // NO FALLBACK
+          areaCode: response.data.areaCode  // NO FALLBACK
+        };
+        
+        setCurrentContainerDetails(containerDetails);
+        setShowContainerSummary(true);
         setShowSuccessModal(true);
         
         // Clear inputs
@@ -130,6 +262,17 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
   const handleCloseSuccess = () => {
     setShowSuccessModal(false);
     setSuccessPackageId('');
+    // Reset the container summary view to show empty form for next container
+    setShowContainerSummary(false);
+    setCurrentContainerDetails(null);
+    // Clear any lingering data
+    setPackageCount(0);
+    setDistributionPointNumber(undefined);
+    setDistributionPointName(undefined);
+    setLineCode(undefined);
+    setBranchCode(undefined);
+    setPointCode(undefined);
+    setContainerBarcode('');
   };
 
   const handleCloseError = () => {
@@ -192,36 +335,93 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
 
       {/* Content */}
       {activeTab === 'new' ? (
-        <View style={styles.content}>
-          {/* Handcuff Barcode Section (PCC) */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>סרוק אזיקון</Text>
-            <TextInput
-              style={styles.input}
-              value={cartonEtiquette}
-              onChangeText={setCartonEtiquette}
-              placeholder="PCC12345678"
-              placeholderTextColor="#999"
-              textAlign="center"
-              returnKeyType="next"
-            />
-          </View>
+        showContainerSummary && currentContainerDetails ? (
+          // Container Summary View (after successful closure)
+          <View style={styles.content}>
+            {/* Container Barcode Display */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>הקלד/סרוק אזיקון</Text>
+              <View style={styles.displayField}>
+                <Text style={styles.displayFieldText}>{currentContainerDetails.containerBarcode}</Text>
+              </View>
+            </View>
 
-          {/* Shot Barcode Section (CH) */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>סרוק ברקוד-שוט</Text>
-            <TextInput
-              style={styles.input}
-              value={cartonBarcode}
-              onChangeText={setCartonBarcode}
-              placeholder="CH25201"
-              placeholderTextColor="#999"
-              textAlign="center"
-              returnKeyType="done"
-              onSubmitEditing={handleConfirm}
-            />
+            {/* Distribution Point Number */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>הקלד נקודת חלוקה</Text>
+              <View style={styles.displayField}>
+                <Text style={styles.displayFieldText}>{currentContainerDetails.exitNumber}</Text>
+              </View>
+            </View>
+
+            {/* Location Details - ONLY show if we have real data */}
+            {(currentContainerDetails.distributionPointName || currentContainerDetails.branchCode || currentContainerDetails.lineCode || currentContainerDetails.areaCode) && (
+              <View style={styles.locationSection}>
+                {currentContainerDetails.distributionPointName && (
+                  <Text style={styles.locationTitle}>
+                    {currentContainerDetails.distributionPointName}
+                  </Text>
+                )}
+                {!currentContainerDetails.distributionPointName && (
+                  <Text style={styles.locationTitle}>
+                    יציאה {currentContainerDetails.exitNumber}
+                  </Text>
+                )}
+                
+                {/* Location Badges - only show if we have real data */}
+                <View style={styles.badgesContainer}>
+                  {currentContainerDetails.branchCode && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>סניף {currentContainerDetails.branchCode}</Text>
+                    </View>
+                  )}
+                  {currentContainerDetails.areaCode && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>אזור הפצה {currentContainerDetails.areaCode}</Text>
+                    </View>
+                  )}
+                  {currentContainerDetails.lineCode && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>קו {currentContainerDetails.lineCode}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
-        </View>
+        ) : (
+          // Original input form
+          <View style={styles.content}>
+            {/* Handcuff Barcode Section (PCC) */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>סרוק אזיקון</Text>
+              <TextInput
+                style={styles.input}
+                value={cartonEtiquette}
+                onChangeText={setCartonEtiquette}
+                placeholder="PCC12345678"
+                placeholderTextColor="#999"
+                textAlign="center"
+                returnKeyType="next"
+              />
+            </View>
+
+            {/* Shot Barcode Section (CH) */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>סרוק ברקוד-שוט</Text>
+              <TextInput
+                style={styles.input}
+                value={cartonBarcode}
+                onChangeText={setCartonBarcode}
+                placeholder="CH25201"
+                placeholderTextColor="#999"
+                textAlign="center"
+                returnKeyType="done"
+                onSubmitEditing={handleConfirm}
+              />
+            </View>
+          </View>
+        )
       ) : (
         <View style={styles.content}>
           <Text style={styles.listTitle}>רשימת אייקונים שנכנסו</Text>
@@ -285,7 +485,7 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
         onRequestClose={handleCloseSuccess}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={styles.successModalContent}>
             <TouchableOpacity 
               style={styles.modalClose}
               onPress={handleCloseSuccess}
@@ -295,25 +495,29 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
             
             <Text style={styles.modalTitle}>סגירת מארזים</Text>
             
-            <View style={styles.successIcon}>
-              <Text style={styles.successIconText}>{packageCount} 📦</Text>
+            <View style={styles.packageCountContainer}>
+              <Text style={styles.packageCountText}>{packageCount} 📦</Text>
+            </View>
+            
+            <View style={styles.successCheckContainer}>
               <Text style={styles.successCheckmark}>✓</Text>
             </View>
             
             <Text style={styles.successMessage}>
-              מארז {successPackageId} נסגר בהצלחה!
+              מארז {successPackageId}
+            </Text>
+            <Text style={styles.successSubMessage}>
+              נסגר בהצלחה!
             </Text>
             
-            {/* Distribution Point Information */}
-            {(distributionPointNumber || distributionPointName || lineCode || branchCode || pointCode) && (
+            {/* Distribution Point Information - Only show if we have real data */}
+            {(distributionPointName || lineCode || branchCode || pointCode) && (
               <View style={styles.distributionInfo}>
-                {distributionPointNumber && (
+                {distributionPointName && (
                   <Text style={styles.distributionPointTitle}>
-                    צ'יקה שופס חולון - {distributionPointNumber}
+                    {distributionPointName}
+                    {distributionPointNumber && ` - ${distributionPointNumber}`}
                   </Text>
-                )}
-                {distributionPointName && !distributionPointNumber && (
-                  <Text style={styles.distributionPointTitle}>{distributionPointName}</Text>
                 )}
                 
                 {/* Location Badges */}
@@ -620,6 +824,24 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  successModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: '#4CAF50',
+    padding: 30,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
   modalClose: {
     position: 'absolute',
     top: 15,
@@ -644,17 +866,35 @@ const styles = StyleSheet.create({
     fontSize: 32,
     marginBottom: 10,
   },
+  packageCountContainer: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  packageCountText: {
+    fontSize: 20,
+    color: '#000',
+  },
+  successCheckContainer: {
+    alignItems: 'center',
+    marginBottom: 15,
+  },
   successCheckmark: {
-    fontSize: 80,
+    fontSize: 60,
     color: '#FFD700',
     fontWeight: 'bold',
   },
   successMessage: {
-    fontSize: 18,
+    fontSize: 20,
     textAlign: 'center',
-    marginBottom: 25,
+    marginBottom: 5,
     color: '#000',
     fontWeight: '600',
+  },
+  successSubMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#000',
   },
   errorIcon: {
     width: 80,
@@ -723,5 +963,52 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  displayField: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    padding: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  displayFieldText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+  },
+  locationSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 20,
+    marginTop: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  locationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  locationSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 15,
+    textAlign: 'center',
   },
 });
