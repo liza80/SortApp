@@ -21,6 +21,7 @@ interface ContainerDetails {
   packageCount: number;
   distributionPointNumber?: number;
   distributionPointName?: string;
+  pudoAddress?: string;
   lineCode?: string;
   branchCode?: string;
   areaCode?: string;
@@ -43,6 +44,7 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
   const [branchCode, setBranchCode] = useState<string | undefined>();
   const [pointCode, setPointCode] = useState<string | undefined>();
   const [containerBarcode, setContainerBarcode] = useState<string>('');
+  const [pudoAddress, setPudoAddress] = useState<string | undefined>();
   const [currentContainerDetails, setCurrentContainerDetails] = useState<ContainerDetails | null>(null);
   const [showContainerSummary, setShowContainerSummary] = useState<boolean>(false);
 
@@ -157,6 +159,11 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
           
           // Extract distribution information from the shipment response
           if (shipmentResponse && shipmentResponse.success && shipmentResponse.data && shipmentResponse.data.length > 0) {
+            // Use the actual shipment count since backend returns 0
+            const actualPackageCount = shipmentResponse.data.length;
+            console.log('Actual package count from shipments:', actualPackageCount);
+            setPackageCount(actualPackageCount);  // Override the 0 from backend
+            
             const firstShipmentData = shipmentResponse.data[0];
             
             // Check if we have a Shipment object with distribution info
@@ -191,6 +198,9 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
               if (pudo.pudoId) {
                 setDistributionPointNumber(pudo.pudoId);
               }
+              if (pudo.pudoAddress) {
+                setPudoAddress(pudo.pudoAddress);
+              }
             }
           }
         } catch (shipmentError) {
@@ -220,6 +230,7 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
           packageCount: response.data.packageCount || 0,
           distributionPointNumber: distPointNum || exitNum,
           distributionPointName: response.data.distributionPointName,  // NO FALLBACK - show only real data
+          pudoAddress: pudoAddress,  // PUDO address from API
           lineCode: response.data.lineCode,  // NO FALLBACK
           branchCode: response.data.branchCode,  // NO FALLBACK
           areaCode: response.data.areaCode  // NO FALLBACK
@@ -511,13 +522,16 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
             </Text>
             
             {/* Distribution Point Information - Only show if we have real data */}
-            {(distributionPointName || lineCode || branchCode || pointCode) && (
+            {(distributionPointName || pudoAddress || lineCode || branchCode || pointCode) && (
               <View style={styles.distributionInfo}>
                 {distributionPointName && (
                   <Text style={styles.distributionPointTitle}>
                     {distributionPointName}
                     {distributionPointNumber && ` - ${distributionPointNumber}`}
                   </Text>
+                )}
+                {pudoAddress && (
+                  <Text style={styles.locationSubtitle}>{pudoAddress}</Text>
                 )}
                 
                 {/* Location Badges */}
