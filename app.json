@@ -12,7 +12,8 @@
       "backgroundColor": "#FFD700"
     },
     "updates": {
-      "enabled": false
+      "enabled": false,
+      "checkAutomatically": "ON_ERROR_RECOVERY"
     },
     "ios": {
       "supportsTablet": true,

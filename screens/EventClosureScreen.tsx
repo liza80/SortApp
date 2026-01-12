@@ -4,6 +4,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import { sortingAPI, operationalAppAPI } from '../config/api';
 import { CloseContainerRequest, CloseContainerResponse } from '../types/api.types';
+import AppBarcodeScanner from '../components/AppBarcodeScanner';
 
 type EventClosureScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'EventClosure'>;
 
@@ -47,6 +48,8 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
   const [pudoAddress, setPudoAddress] = useState<string | undefined>();
   const [currentContainerDetails, setCurrentContainerDetails] = useState<ContainerDetails | null>(null);
   const [showContainerSummary, setShowContainerSummary] = useState<boolean>(false);
+  const [showScanner, setShowScanner] = useState<boolean>(false);
+  const [scanningField, setScanningField] = useState<'etiquette' | 'barcode'>('etiquette');
 
   // Mock counter for demonstration
   const totalScanned = scannedItems.length;
@@ -291,6 +294,22 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
     setErrorMessage('');
   };
 
+  // Barcode Scanner handlers
+  const handleBarcodeScanned = (scannedCode: string) => {
+    console.log('Barcode scanned:', scannedCode);
+    if (scanningField === 'etiquette') {
+      setCartonEtiquette(scannedCode);
+    } else {
+      setCartonBarcode(scannedCode);
+    }
+    setShowScanner(false);
+  };
+
+  const openBarcodeScanner = (field: 'etiquette' | 'barcode') => {
+    setScanningField(field);
+    setShowScanner(true);
+  };
+
   const renderScannedItem = ({ item, index }: { item: string; index: number }) => (
     <View style={styles.scannedItem}>
       <Text style={styles.scannedItemText}>{item}</Text>
@@ -338,7 +357,10 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
           <Text style={styles.actionButtonText}>הזנה ידנית</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => openBarcodeScanner('etiquette')}
+        >
           <Text style={styles.actionButtonIcon}>📷</Text>
           <Text style={styles.actionButtonText}>סריקה ברקוד</Text>
         </TouchableOpacity>
@@ -589,6 +611,33 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* Barcode Scanner Modal */}
+      <Modal
+        visible={showScanner}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowScanner(false)}
+      >
+        <SafeAreaView style={styles.scannerContainer}>
+          <View style={styles.scannerHeader}>
+            <TouchableOpacity 
+              onPress={() => setShowScanner(false)}
+              style={styles.scannerCloseButton}
+            >
+              <Text style={styles.scannerCloseText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.scannerTitle}>
+              סריקת {scanningField === 'etiquette' ? 'אזיקון' : 'ברקוד-שוט'}
+            </Text>
+          </View>
+          
+          <AppBarcodeScanner 
+            onBarcodeScanned={handleBarcodeScanned}
+            handleNoPermission={() => setShowScanner(false)}
+          />
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -1024,5 +1073,33 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 15,
     textAlign: 'center',
+  },
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  scannerHeader: {
+    backgroundColor: '#FFD700',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  scannerCloseButton: {
+    position: 'absolute',
+    left: 20,
+    padding: 5,
+  },
+  scannerCloseText: {
+    fontSize: 24,
+    color: '#000',
+  },
+  scannerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
   },
 });
