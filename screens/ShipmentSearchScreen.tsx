@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator, Modal } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import { operationalAppAPI } from '../config/api';
 import { AxiosError } from 'axios';
+import AppBarcodeScanner from '../components/AppBarcodeScanner';
 
 type ShipmentSearchScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShipmentSearch'>;
 
@@ -18,9 +19,24 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
   const [shipmentNumber, setShipmentNumber] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [showScanner, setShowScanner] = useState<boolean>(false);
 
-  const handleSearch = async () => {
-    if (!shipmentNumber.trim()) {
+  // Handle barcode scanning
+  const handleBarcodeScanned = (scannedCode: string) => {
+    console.log('Barcode scanned:', scannedCode);
+    setShipmentNumber(scannedCode);
+    setShowScanner(false);
+    setActiveTab('manual'); // Switch to manual tab to show the scanned value
+    // Automatically search after scanning
+    setTimeout(() => {
+      handleSearch(scannedCode);
+    }, 100);
+  };
+
+  const handleSearch = async (barcodeValue?: string) => {
+    const searchValue = barcodeValue || shipmentNumber.trim();
+    
+    if (!searchValue) {
       setErrorMessage('אנא הזן מספר משלוח');
       return;
     }
@@ -29,7 +45,7 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
     setErrorMessage(''); // Clear previous errors
     try {
       // Call the FindShipmentsByID API endpoint
-      const response = await operationalAppAPI.getShipmentByNumber(shipmentNumber.trim());
+      const response = await operationalAppAPI.getShipmentByNumber(searchValue);
       
       // Check if the response was successful and has data
       if (response.success && response.data && response.data.length > 0) {
@@ -42,7 +58,7 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
         navigation.navigate('ShipmentDetails', { 
           shipmentData: {
             success: true,
-            shipmentNumber: shipment.shipmentId?.toString() || shipmentNumber.trim(),
+            shipmentNumber: shipment.shipmentId?.toString() || searchValue,
             customerName: shipment.customerName || '',
             destinationAddress: shipment.destinationAddress || '',
             consigneePhone: shipment.consigneePhone?.toString() || '',
@@ -50,7 +66,7 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
             distributionArea: shipment.distributionArea || 0,
             distributionSegment: shipment.distributionSegment || 0,
           },
-          barcode: shipmentNumber.trim()
+          barcode: searchValue
         });
       } else {
         // Show error message - no shipments found
@@ -112,7 +128,10 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
         
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'barcode' && styles.activeTab]}
-          onPress={() => setActiveTab('barcode')}
+          onPress={() => {
+            setActiveTab('barcode');
+            setShowScanner(true);
+          }}
           disabled={loading}
         >
           <Text style={[styles.tabText, activeTab === 'barcode' && styles.activeTabText]}>
@@ -135,7 +154,7 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
             keyboardType="default"
             textAlign="center"
             editable={!loading}
-            onSubmitEditing={handleSearch}
+            onSubmitEditing={() => handleSearch()}
             returnKeyType="search"
           />
         </View>
@@ -159,7 +178,7 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
       <View style={styles.bottomButtons}>
         <TouchableOpacity 
           style={[styles.button, styles.confirmButton, loading && styles.disabledButton]}
-          onPress={handleSearch}
+          onPress={() => handleSearch()}
           disabled={loading}
         >
           {loading ? (
@@ -177,6 +196,31 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
           <Text style={styles.cancelButtonText}>ביטול</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Barcode Scanner Modal */}
+      <Modal
+        visible={showScanner}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowScanner(false)}
+      >
+        <SafeAreaView style={styles.scannerContainer}>
+          <View style={styles.scannerHeader}>
+            <TouchableOpacity 
+              onPress={() => setShowScanner(false)}
+              style={styles.scannerCloseButton}
+            >
+              <Text style={styles.scannerCloseText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.scannerTitle}>סריקת משלוח</Text>
+          </View>
+          
+          <AppBarcodeScanner 
+            onBarcodeScanned={handleBarcodeScanned}
+            handleNoPermission={() => setShowScanner(false)}
+          />
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -336,5 +380,31 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#3949AB',
+  },
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  scannerHeader: {
+    backgroundColor: '#3949AB',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scannerCloseButton: {
+    position: 'absolute',
+    left: 20,
+    padding: 5,
+  },
+  scannerCloseText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+  },
+  scannerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });
