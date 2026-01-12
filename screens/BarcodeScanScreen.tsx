@@ -41,65 +41,85 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
   const [error, setError] = useState<string>('');
 
   const handleBarcodeScanned = async (code: string) => {
+    console.log('Barcode scanned:', code);
     setInputValue(code);
-    await handleConfirm();
+    // Pass the code directly to handleConfirm instead of relying on state
+    await handleConfirm(code);
   };
 
-  const handleConfirm = async () => {
-    if (!inputValue.trim()) {
+  const handleConfirm = async (scannedCode?: string) => {
+    // Use the passed code or fall back to input value
+    const codeToProcess = scannedCode || inputValue;
+    
+    console.log('=== handleConfirm called ===');
+    console.log('Code to process:', codeToProcess);
+    console.log('Current shipmentResponseData:', shipmentResponseData);
+    console.log('EventCode (count):', count);
+    
+    if (!codeToProcess.trim()) {
       setError('נא להזין ברקוד');
       return;
     }
 
     setLoading(true);
     setError('');
-    setResult(null);
-    setShipmentResponseData(null);
-
+    
     try {
-      // First, fetch shipment data from OperationalApp
-      console.log('Fetching shipment data for:', inputValue);
-      const shipmentResponse = await operationalAppAPI.getShipmentByNumber(inputValue);
-      console.log('Shipment response:', shipmentResponse);
+      let currentShipmentData = shipmentResponseData;
       
-      if (shipmentResponse.success && shipmentResponse.data && shipmentResponse.data.length > 0) {
-        // Store shipment response data (ShipmentResponse with additional fields)
-        console.log('Shipment data found:', shipmentResponse.data[0]);
-        setShipmentResponseData(shipmentResponse.data[0]);
+      // If we don't have shipment data yet, fetch it first
+      if (!currentShipmentData) {
+        console.log('Fetching shipment data for:', codeToProcess);
+        const shipmentResponse = await operationalAppAPI.getShipmentByNumber(codeToProcess);
+        console.log('Shipment response:', shipmentResponse);
         
-        // Then, update operations with RunRequestDTO structure
-        const data = await shipmentsAPI.updateOperations([{
-          EventCode: count, // 83, 53, 600, or 109
-          MsgDateTime: new Date().toISOString(),
-          MsgData: {
-            DriverId: 6001,
-            ShipmentsList: [{
-              ShipmentId: inputValue,
-              ActualQuantity: 1,
-              IsScan: scanMode === 'barcode' // true if barcode scan, false if manual
-            }],
-            Coordinates: ''
-          }
-        }]);
-        
-        if (data.success) {
-          setResult({
-            success: true,
-            message: 'ברקוד נסרק בהצלחה',
-            shipmentQuantity: 1,
-            errorQuantity: 0,
-            containerQuantity: 0,
-            lastBarcode: inputValue
-          });
-          // Don't clear input immediately so user can see what was scanned
-          // setInputValue('');
+        if (shipmentResponse.success && shipmentResponse.data && shipmentResponse.data.length > 0) {
+          console.log('Shipment data found:', shipmentResponse.data[0]);
+          currentShipmentData = shipmentResponse.data[0];
+          setShipmentResponseData(currentShipmentData);
         } else {
-          setError('שגיאה בסריקת ברקוד');
+          console.log('No shipment found or error:', shipmentResponse);
+          setError('לא נמצא משלוח');
+          setLoading(false);
+          return;
         }
+      }
+      
+      // Now send the update operation to record the scan
+      console.log('Sending update operation for:', codeToProcess);
+      const updateData = {
+        EventCode: count, // 83, 53, 600, or 109
+        MsgDateTime: new Date().toISOString(),
+        MsgData: {
+          DriverId: 6001,
+          ShipmentsList: [{
+            ShipmentId: codeToProcess,
+            ActualQuantity: 1,
+            IsScan: scanMode === 'barcode' || !!scannedCode // true if barcode scan or scanned code passed
+          }],
+          Coordinates: ''
+        }
+      };
+      console.log('Update data:', updateData);
+      
+      const data = await shipmentsAPI.updateOperations([updateData]);
+      console.log('Update response:', data);
+      
+      if (data.success) {
+        setResult({
+          success: true,
+          message: 'ברקוד נסרק בהצלחה',
+          shipmentQuantity: 1,
+          errorQuantity: 0,
+          containerQuantity: 0,
+          lastBarcode: codeToProcess
+        });
+        
+        // Clear only the input field for next scan
+        setInputValue('');
+        // Keep the shipment data visible - it will be replaced when scanning a new item
       } else {
-        // Always show Hebrew message for not found shipments
-        console.log('No shipment found or error:', shipmentResponse);
-        setError('לא נמצא משלוח');
+        setError('שגיאה בסריקת ברקוד');
       }
     } catch (err: any) {
       console.error('Scan error details:', err);
@@ -175,22 +195,19 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
       </View>
 
       {/* Main Content */}
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {scanMode === 'barcode' && canUseScanner ? (
-          <View style={styles.scannerContainer}>
-            <AppBarcodeScanner
-              onBarcodeScanned={(code: string) => {
-                setInputValue(code);
-                handleConfirm();
-              }}
-              handleNoPermission={() => {
-                setError('אין הרשאת מצלמה. עבור להזנה ידנית.');
-                setScanMode('manual');
-              }}
-            />
-          </View>
-        ) : (
-          <>
+      {scanMode === 'barcode' && canUseScanner ? (
+        <View style={styles.scannerWrapper}>
+          <AppBarcodeScanner
+            onBarcodeScanned={handleBarcodeScanned}
+            handleNoPermission={() => {
+              setError('אין הרשאת מצלמה. עבור להזנה ידנית.');
+              setScanMode('manual');
+            }}
+          />
+        </View>
+      ) : (
+        <View style={styles.content}>
+          <ScrollView style={styles.scrollContent} contentContainerStyle={styles.contentContainer}>
             <Text style={styles.contentTitle}>הקלד/סרוק חבילה או שק</Text>
             
             <View style={styles.inputContainer}>
@@ -205,26 +222,24 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
                 editable={!loading}
               />
             </View>
-          </>
-        )}
 
-        {/* Loading State */}
-        {loading && (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>סורק...</Text>
-          </View>
-        )}
+          {/* Loading State */}
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>סורק...</Text>
+            </View>
+          )}
 
-        {/* Error Message */}
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>❌ {error}</Text>
-          </View>
-        )}
+          {/* Error Message */}
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>❌ {error}</Text>
+            </View>
+          )}
 
-        {/* Shipment Data Display */}
-        {shipmentResponseData && !error && result && (
-          <View style={styles.shipmentDataContainer}>
+          {/* Shipment Data Display */}
+          {shipmentResponseData && !error && result && (
+            <View style={styles.shipmentDataContainer}>
             <Text style={styles.shipmentDataTitle}>📦 פרטי משלוח</Text>
             
             {/* Return Shipment Badge */}
@@ -233,86 +248,74 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
                 <Text style={styles.returnShipmentText}>🔄 משלוח חוזר</Text>
               </View>
             )}
+
             
             <View style={styles.shipmentDataRow}>
+              <Text style={styles.shipmentDataLabel}>מספר משלוח</Text>
               <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.shipmentId}</Text>
-              <Text style={styles.shipmentDataLabel}>מספר משלוח:</Text>
             </View>
 
             {shipmentResponseData.shipment.customerName && (
               <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataLabel}>שם לקוח</Text>
                 <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.customerName}</Text>
-                <Text style={styles.shipmentDataLabel}>שם לקוח:</Text>
               </View>
             )}
 
             {shipmentResponseData.shipment.destinationAddress && (
               <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataLabel}>כתובת יעד</Text>
                 <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.destinationAddress}</Text>
-                <Text style={styles.shipmentDataLabel}>כתובת יעד:</Text>
               </View>
             )}
 
             {shipmentResponseData.shipment.consigneePhone && (
               <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataLabel}>טלפון</Text>
                 <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.consigneePhone}</Text>
-                <Text style={styles.shipmentDataLabel}>טלפון:</Text>
               </View>
             )}
 
-            {/* Show Line, Branch, and Distribution Point for return shipments (type 3) */}
-            {shipmentResponseData.shipment.shipmentType === 3 && (
-              <>
-                <View style={styles.shipmentDataRow}>
-                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionLine}</Text>
-                  <Text style={styles.shipmentDataLabel}>קו:</Text>
-                </View>
-
-                <View style={styles.shipmentDataRow}>
-                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionArea}</Text>
-                  <Text style={styles.shipmentDataLabel}>סניף:</Text>
-                </View>
-
-                <View style={styles.shipmentDataRow}>
-                  <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionSegment || 0}</Text>
-                  <Text style={styles.shipmentDataLabel}>נקודת חלוקה:</Text>
-                </View>
-              </>
+            {/* Show Line, Branch, and Distribution Point for all shipments with this data */}
+            {shipmentResponseData.shipment.distributionLine && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataLabel}>קו</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionLine}</Text>
+              </View>
             )}
 
-            {/* Only show PCC and PUDO for non-return shipments */}
+            {shipmentResponseData.shipment.distributionArea && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataLabel}>סניף</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionArea}</Text>
+              </View>
+            )}
+
+            {(shipmentResponseData.shipment.distributionSegment !== null && shipmentResponseData.shipment.distributionSegment !== undefined) && (
+              <View style={styles.shipmentDataRow}>
+                <Text style={styles.shipmentDataLabel}>נקודת חלוקה</Text>
+                <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.distributionSegment}</Text>
+              </View>
+            )}
+
+            {/* Only show PUDO for non-return shipments */}
             {shipmentResponseData.shipment.shipmentType !== 3 && (
               <>
-                {shipmentResponseData.shipment.pccId && (
-                  <View style={styles.shipmentDataRow}>
-                    <Text style={styles.shipmentDataValue}>{shipmentResponseData.shipment.pccId}</Text>
-                    <Text style={styles.shipmentDataLabel}>PCC:</Text>
-                  </View>
-                )}
-
-                <View style={styles.shipmentDataRow}>
-                  <Text style={styles.shipmentDataValue}>
-                    {shipmentResponseData.pudo?.pudoName || 
-                     (shipmentResponseData.shipment.pudoId ? shipmentResponseData.shipment.pudoId.toString() : '0')}
-                  </Text>
-                  <Text style={styles.shipmentDataLabel}>נקודת חלוקה:</Text>
-                </View>
-
                 {shipmentResponseData.pudo && (
                   <>
                     <Text style={styles.sectionTitle}>📍 נקודת איסוף (PUDO)</Text>
                     <View style={styles.shipmentDataRow}>
+                      <Text style={styles.shipmentDataLabel}>שם</Text>
                       <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoName}</Text>
-                      <Text style={styles.shipmentDataLabel}>שם:</Text>
                     </View>
                     <View style={styles.shipmentDataRow}>
+                      <Text style={styles.shipmentDataLabel}>כתובת</Text>
                       <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoAddress}</Text>
-                      <Text style={styles.shipmentDataLabel}>כתובת:</Text>
                     </View>
                     {shipmentResponseData.pudo.pudoPhone && (
                       <View style={styles.shipmentDataRow}>
+                        <Text style={styles.shipmentDataLabel}>טלפון</Text>
                         <Text style={styles.shipmentDataValue}>{shipmentResponseData.pudo.pudoPhone}</Text>
-                        <Text style={styles.shipmentDataLabel}>טלפון:</Text>
                       </View>
                     )}
                   </>
@@ -332,14 +335,16 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
               </>
             )}
           </View>
-        )}
-      </ScrollView>
+          )}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Bottom Buttons */}
       <View style={styles.bottomButtons}>
         <TouchableOpacity 
           style={styles.confirmButton}
-          onPress={handleConfirm}
+          onPress={() => handleConfirm()}
         >
           <Text style={styles.confirmButtonText}>אישור</Text>
         </TouchableOpacity>
@@ -419,24 +424,28 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 15,
-    paddingBottom: 20,
-  },
-  scannerContainer: {
+  scrollContent: {
     flex: 1,
   },
+  contentContainer: {
+    padding: 10,
+    paddingBottom: 10,
+  },
+  scannerWrapper: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
   contentTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 10,
     color: '#333',
   },
   inputContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 20,
+    borderRadius: 10,
+    padding: 10,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -447,18 +456,18 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   inputLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 15,
+    marginBottom: 8,
     color: '#666',
   },
   input: {
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 10,
-    padding: 15,
-    fontSize: 18,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 16,
     textAlign: 'center',
     backgroundColor: '#F9F9F9',
   },
@@ -494,10 +503,10 @@ const styles = StyleSheet.create({
     color: '#0066CC',
   },
   loadingContainer: {
-    marginTop: 20,
-    padding: 15,
+    marginTop: 8,
+    padding: 8,
     backgroundColor: '#FFF9C4',
-    borderRadius: 10,
+    borderRadius: 6,
     alignItems: 'center',
   },
   loadingText: {
@@ -567,36 +576,44 @@ const styles = StyleSheet.create({
   },
   shipmentDataContainer: {
     marginTop: 10,
-    padding: 12,
-    backgroundColor: '#E3F2FD',
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   shipmentDataTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#1565C0',
+    color: '#0066CC',
     textAlign: 'center',
-    marginBottom: 10,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    backgroundColor: '#F8F9FA',
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
   },
   shipmentDataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
+    paddingHorizontal: 15,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#BBDEFB',
+    borderBottomColor: '#E8E8E8',
   },
   shipmentDataLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#424242',
-    flex: 1,
+    fontSize: 11,
+    fontWeight: '400',
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 2,
   },
   shipmentDataValue: {
     fontSize: 13,
-    color: '#1565C0',
-    flex: 1,
-    textAlign: 'right',
-    fontWeight: '500',
+    color: '#000000',
+    textAlign: 'center',
+    fontWeight: '400',
   },
   warningText: {
     color: '#D32F2F',
@@ -634,5 +651,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  summarySection: {
+    backgroundColor: '#F5F7FA',
+    padding: 15,
+    marginBottom: 10,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333333',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: '#666666',
+    marginBottom: 5,
+  },
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000000',
   },
 });

@@ -62,6 +62,9 @@ const AppBarcodeScanner: React.FC<AppBarcodeScannerProps> = ({
   
   const device = shouldUseFallback() ? null : useCameraDevice('back');
 
+  // Additional check: if device is null but we're not in fallback mode, force fallback
+  const shouldUseFallbackWithDevice = shouldUseFallback() || (!device && isFocused);
+
   const checkCameraPermission = async () => {
     // Skip permission check if using fallback
     if (shouldUseFallback()) {
@@ -78,10 +81,11 @@ const AppBarcodeScanner: React.FC<AppBarcodeScannerProps> = ({
   };
 
   useEffect(() => {
-    // Determine if we should use fallback mode
-    setUseFallbackMode(shouldUseFallback());
+    // Determine if we should use fallback mode (including device check)
+    const fallback = shouldUseFallbackWithDevice;
+    setUseFallbackMode(fallback);
     
-    if (isFocused && !shouldUseFallback()) {
+    if (isFocused && !fallback) {
       checkCameraPermission();
     }
     if (!isFocused && torch === TorchMode.ON) {
@@ -92,7 +96,7 @@ const AppBarcodeScanner: React.FC<AppBarcodeScannerProps> = ({
         setIsScanned(false);
       }, 1000);
     }
-  }, [isFocused]);
+  }, [isFocused, device]);
 
   const codeScanner = useFallbackMode ? {} : useCodeScanner({
     codeTypes: ['code-128', 'code-39', 'code-93', 'ean-13', 'ean-8', 'qr', 'pdf-417'],
@@ -124,16 +128,12 @@ const AppBarcodeScanner: React.FC<AppBarcodeScannerProps> = ({
   };
 
   // Show fallback UI for web/emulator or when camera is not available
-  if (useFallbackMode || Platform.OS === 'web') {
+  if (useFallbackMode || Platform.OS === 'web' || !device) {
     return (
       <View style={styles.permissionContainer}>
-        <Text style={styles.permissionTitle}>
-          {Platform.OS === 'web' ? 'סורק ברקוד - מצב ווב' : 'סורק ברקוד - מצב ידני'}
-        </Text>
+        <Text style={styles.permissionTitle}>סורק ברקוד - מצב ידני</Text>
         <Text style={styles.permissionText}>
-          {Platform.OS === 'web' 
-            ? 'המצלמה אינה זמינה בדפדפן. השתמש בהזנה ידנית.'
-            : 'מצלמה אינה זמינה. השתמש בהזנה ידנית או בדוק הגדרות אמולטור.'}
+          הזן ברקוד ידנית:
         </Text>
         <TextInput
           style={styles.barcodeInput}
@@ -195,16 +195,17 @@ const AppBarcodeScanner: React.FC<AppBarcodeScannerProps> = ({
     );
   }
 
-  if (!device) {
-    return (
-      <View style={styles.permissionContainer}>
-        <Text style={styles.permissionTitle}>לא נמצאה מצלמה</Text>
-        <Text style={styles.permissionText}>
-          לא ניתן לגשת למצלמה במכשיר זה.
-        </Text>
-      </View>
-    );
-  }
+  // This check is now redundant since we handle !device above
+  // if (!device) {
+  //   return (
+  //     <View style={styles.permissionContainer}>
+  //       <Text style={styles.permissionTitle}>לא נמצאה מצלמה</Text>
+  //       <Text style={styles.permissionText}>
+  //         לא ניתן לגשת למצלמה במכשיר זה.
+  //       </Text>
+  //     </View>
+  //   );
+  // }
 
   return (
     <View style={styles.cameraContainer}>
