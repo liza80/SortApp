@@ -53,7 +53,10 @@ export default function PackagesMenuScreen({ navigation }: PackagesMenuScreenPro
           <Text style={styles.actionButtonText}>סגירת מארזים</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.actionButton, styles.blueButton]}>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.blueButton]}
+          onPress={() => navigation.navigate('CreateContainer')}
+        >
           <Text style={styles.actionButtonText}>הקמת מארז חדש</Text>
         </TouchableOpacity>
 

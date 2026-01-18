@@ -17,7 +17,7 @@ import {
 const IS_PRODUCTION = false; // Set to false for development/testing with local API
 const PRODUCTION_API_HOST = 'dcz9s109vojxy.cloudfront.net'; // CloudFront distribution URL
 const PHYSICAL_DEVICE_IP = null; // For development: Set this to your computer's IP if using a physical device
-const API_PORT = '5002';          // Using localhost:5001 for local CourierApi
+const API_PORT = '5002';          // CourierApi is running on port 5002
 const API_PROTOCOL = 'http'; // Using HTTP for local development (not HTTPS)
 
 // Automatically determine the correct host based on environment and platform
@@ -178,6 +178,66 @@ export const sortingAPI = {
       return response.data;
     } catch (error) {
       console.error('Error validating worker session:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Create new container
+   * @param request - Container creation request
+   * @returns API response
+   */
+  createContainer: async (request: {
+    sessionId: number;
+    driverId: number;
+    exitZone: number;
+    distributionPoint: number;
+    containerPCC: string;
+  }): Promise<ApiResponse<any>> => {
+    try {
+      const backendRequest = {
+        SessionId: request.sessionId,
+        DriverId: request.driverId,
+        ExitZone: request.exitZone,
+        DistributionPoint: request.distributionPoint,
+        ContainerPCC: request.containerPCC
+      };
+      const response = await sortingApiClient.post<ApiResponse<any>>('/CreateContainer', backendRequest);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating container:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Add package to container
+   * @param request - Package addition request
+   * @returns API response
+   */
+  addPackageToContainer: async (request: {
+    sessionId: number;
+    driverId: number;
+    packageBarcode: string;
+    containerPCC: string;
+    exitZone: number;
+    distributionPoint?: number;
+    headerId?: number;
+  }): Promise<ApiResponse<any>> => {
+    try {
+      const backendRequest = {
+        SessionId: request.sessionId,
+        DriverId: request.driverId,
+        PackageBarcode: request.packageBarcode,
+        ContainerPCC: request.containerPCC,
+        ExitZone: request.exitZone,
+        DistributionPoint: request.distributionPoint,
+        HeaderId: request.headerId
+      };
+      const response = await sortingApiClient.post<ApiResponse<any>>('/AddPackageToContainer', backendRequest);
+      return response.data;
+    } catch (error) {
+      console.error('Error adding package to container:', error);
       throw error;
     }
   },
