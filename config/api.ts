@@ -236,8 +236,21 @@ export const sortingAPI = {
       };
       const response = await sortingApiClient.post<ApiResponse<any>>('/AddPackageToContainer', backendRequest);
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding package to container:', error);
+      
+      // If it's an axios error with response data, extract the error message
+      if (error.response?.data) {
+        console.log('Axios error response data:', error.response.data);
+        
+        // If the response contains our API response structure
+        if (error.response.data.data?.message || error.response.data.data?.errorMessage) {
+          // Return the error response data so the component can handle it
+          return error.response.data;
+        }
+      }
+      
+      // Re-throw the error for other cases
       throw error;
     }
   },

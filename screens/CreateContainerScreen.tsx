@@ -46,7 +46,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
     const trimmedDistributionPoint = distributionPoint.trim();
     
     if (!trimmedExitZone) {
-      Alert.alert('שגיאה', 'נא להזין מספר איזקון');
+      Alert.alert('שגיאה', 'נא להזין מספר איזקון או לסרוק PCC');
       return;
     }
     
@@ -55,26 +55,61 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       return;
     }
 
-    // Parse numbers - NO VALIDATION, just use 0 if not a valid number
-    const exitZoneNum = parseInt(trimmedExitZone, 10) || 0;
+    // LEGACY LOGIC from TchiltKriotBrkodM:
+    // The legacy system receives answers in format "1004:exitZone^1005:azikon"
+    // Where 1004 is the exit zone question and 1005 is the azikon (container PCC) question
+    
+    let pcc = '';
+    let exitZoneNum = 0;
+    let isAzikonInput = false;
+    
+    // Check if input is a container identifier (PCC or container number)
+    if (trimmedExitZone.toUpperCase().startsWith('PCC')) {
+      // It's a PCC barcode - this is treated as Azikon in legacy
+      pcc = trimmedExitZone.toUpperCase();
+      isAzikonInput = true;
+      console.log('📦 Using Azikon (PCC):', pcc);
+    } else if (/^\d+$/.test(trimmedExitZone)) {
+      // Numeric input - could be container number or exit zone
+      const numericValue = parseInt(trimmedExitZone, 10);
+      
+      // Legacy checks if it's an existing container MAARAZ first
+      // But for simplicity, we'll check range: 
+      // Container numbers are typically > 1000, exit zones are typically < 1000
+      if (numericValue > 1000) {
+        // Likely a container number - treat as Azikon
+        pcc = numericValue.toString();
+        isAzikonInput = true;
+        console.log('📦 Using Azikon (container number):', pcc);
+      } else {
+        // Treat as exit zone
+        exitZoneNum = numericValue;
+        // Generate new PCC for new container
+        pcc = `PCC${Date.now().toString().slice(-8)}`;
+        console.log('🔄 Exit zone:', exitZoneNum, 'Generated PCC:', pcc);
+      }
+    } else {
+      // Non-numeric, non-PCC input - treat as Azikon
+      pcc = trimmedExitZone;
+      isAzikonInput = true;
+      console.log('📦 Using Azikon (custom):', pcc);
+    }
+    
     const distributionPointNum = parseInt(trimmedDistributionPoint, 10) || 0;
     
-    console.log('🚀 Proceeding with values - exitZone:', exitZoneNum, 'distributionPoint:', distributionPointNum);
+    // If it's an Azikon input, we need to set a default exit zone
+    if (isAzikonInput && exitZoneNum === 0) {
+      exitZoneNum = 1; // Default exit zone for Azikon containers
+    }
+    
+    console.log('🚀 Final values - exitZone:', exitZoneNum, 'distributionPoint:', distributionPointNum, 'PCC/Azikon:', pcc);
 
     setLoading(true);
     try {
-      // Generate PCC number
-      const pcc = `PCC${Date.now().toString().slice(-8)}`;
       
-      console.log('Creating container with params:', {
-        sessionId: 1234,
-        driverId: 6001,
-        exitZone: exitZoneNum,
-        distributionPoint: distributionPointNum,
-        containerPCC: pcc
-      });
+      console.log('Creating container with CourierApi SortingController - distribution point:', distributionPointNum, 'PCC/Azikon:', pcc);
       
-      // Call the createContainer API
+      // Call the container creation API from CourierApi's SortingController
       const response = await sortingAPI.createContainer({
         sessionId: 1234, // This would come from user session in a real app
         driverId: 6001, // Driver ID from user session
@@ -85,31 +120,66 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
 
       console.log('CreateContainer API response:', response);
 
-      if (response.success && response.data) {
-        setContainerPCC(response.data.containerPCC || pcc);
+      if (response.success) {
+        setContainerPCC(pcc);
         
-        // Set exit zone details from API response
+        // Set exit zone details (simulate response since the new API doesn't return detailed info)
+        // Get HeaderId from the response - this is critical!
+        const headerId = response.data?.headerId || 
+                        response.data?.HeaderId || 
+                        response.data?.headerID || 
+                        0;
+        
+        if (headerId === 0) {
+          console.error('ERROR: No HeaderId returned from container creation!');
+        } else {
+          console.log('✅ Successfully got HeaderId:', headerId);
+        }
+        
         setExitZoneDetails({
           exitNumber: exitZone,
           distributionPoint: distributionPoint,
-          description: response.data.exitDescription || `צ'יפה שופט חולון - ${distributionPoint}`,
-          area: response.data.distributionArea || 'אריה שגריר 4, חולון',
-          line: response.data.line || '480',
-          routeNumber: response.data.branch || '11',
-          floorNumber: response.data.exitZone?.toString() || '12',
-          headerId: response.data.headerId // Store the header ID for later use
+          description: `צ'יטה שופט חולון - ${distributionPoint}`,
+          area: 'אריה שגריר 4, חולון',
+          line: '480',
+          routeNumber: '11',
+          floorNumber: exitZoneNum.toString() || '12',
+          headerId: headerId // Store the HeaderId for package addition
         });
 
         setShowContainerDetails(true);
       } else {
         console.error('Container creation failed:', response);
-        const errorMsg = response.data?.errorMessage || 'אירעה שגיאה ביצירת המארז';
-        Alert.alert('שגיאה', errorMsg);
+        const errorMsg = response.errorMessage || response.data?.errorMessage || 'אירעה שגיאה ביצירת המארז';
+        setErrorMessage(errorMsg);
+        setShowErrorModal(true);
       }
     } catch (error) {
       console.error('Error calling createContainer API:', error);
-      const errorMsg = error instanceof Error ? error.message : 'אירעה שגיאה בחיבור לשרת';
-      Alert.alert('שגיאת חיבור', `לא ניתן להתחבר לשרת.\n${errorMsg}\n\nוודא שהשרת פועל בכתובת http://localhost:5002`);
+      // Extract error message from the error response if available
+      let errorMsg = 'שגיאה בהקמת מארז';
+      if (error instanceof Error) {
+        // Try to parse error message from HTTP error
+        const errorStr = error.message;
+        try {
+          // Look for JSON in the error message
+          const jsonStart = errorStr.indexOf('{');
+          if (jsonStart >= 0) {
+            const jsonStr = errorStr.substring(jsonStart);
+            const errorData = JSON.parse(jsonStr);
+            if (errorData.data?.message) {
+              errorMsg = errorData.data.message;
+            } else if (errorData.data?.errorMessage) {
+              errorMsg = errorData.data.errorMessage;
+            }
+          }
+        } catch (parseError) {
+          // If parsing fails, use the original error message
+          errorMsg = 'שגיאה בהקמת מארז - נסה שנית';
+        }
+      }
+      setErrorMessage(errorMsg);
+      setShowErrorModal(true);
     } finally {
       setLoading(false);
     }
@@ -137,14 +207,13 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
 
     setLoading(true);
     try {
-      // Parse and validate numbers for API call
-      const exitZoneNum = parseInt(exitZone.trim(), 10);
+      // When using PCC containers, exit zone is not needed - use 0
+      const exitZoneNum = 0; // PCC containers don't need explicit exit zone
       const distributionPointNum = parseInt(distributionPoint.trim(), 10);
       
-      // These should already be valid from handleConfirmContainerDetails,
-      // but double-check to prevent NaN errors
-      if (isNaN(exitZoneNum) || isNaN(distributionPointNum)) {
-        console.error('Invalid zone/point numbers during package scan');
+      // Validate distribution point
+      if (isNaN(distributionPointNum)) {
+        console.error('Invalid distribution point number');
         Alert.alert('שגיאה', 'אירעה שגיאה בנתוני המארז');
         setLoading(false);
         return;
@@ -156,7 +225,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
         driverId: 6001, // Driver ID from user session
         packageBarcode: code,
         containerPCC: containerPCC,
-        exitZone: exitZoneNum,
+        exitZone: exitZoneNum, // Always 0 for PCC containers
         distributionPoint: distributionPointNum,
         headerId: exitZoneDetails?.headerId
       });
@@ -180,16 +249,113 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
 
         setScannedPackages([...scannedPackages, newPackage]);
         setPackageInput('');
-
-        // Check if container has packages but not full
-        if (scannedPackages.length === 0) {
-          setShowWarningModal(true);
-        }
+        
+        // Package added successfully - input will auto-focus for next scan
       } else {
-        Alert.alert('שגיאה', response.data?.errorMessage || 'אירעה שגיאה בהוספת החבילה');
+        // Handle error response when success is false
+        let errorMsg = response.data?.message || response.data?.errorMessage || 'אירעה שגיאה בהוספת החבילה';
+        
+        // Always append barcode if the message is about not finding a shipment
+        if (errorMsg.includes('לא נמצא משלוח מתאים לברקוד') && !errorMsg.includes(code)) {
+          // Remove any trailing colon and add the barcode
+          errorMsg = errorMsg.replace(/:?\s*$/, '') + `: ${code}`;
+        }
+        
+        setErrorMessage(errorMsg);
+        setShowErrorModal(true);
+        setPackageInput('');
       }
-    } catch (error) {
-      Alert.alert('שגיאה', 'אירעה שגיאה בהוספת החבילה למארז');
+    } catch (error: any) {
+      // Extract error message from HTTP error response
+      let errorMsg = 'אירעה שגיאה בהוספת החבילה למארז';
+      
+      console.log('Full error object:', error);
+      console.log('Error message:', error?.message);
+      console.log('Error response:', error?.response);
+      
+      // Check if error has response data (axios-style)
+      if (error?.response?.data) {
+        const responseData = error.response.data;
+        console.log('Response data:', responseData);
+        
+        if (responseData.data?.message) {
+          errorMsg = responseData.data.message;
+        } else if (responseData.data?.errorMessage) {
+          errorMsg = responseData.data.errorMessage;
+        }
+      } 
+      // Check if error message contains the response (fetch-style)
+      else if (error instanceof Error) {
+        const errorStr = error.message || error.toString();
+        console.log('Error string:', errorStr);
+        
+        // Try to extract JSON error data from the error message
+        try {
+          const jsonStart = errorStr.indexOf('{');
+          if (jsonStart >= 0) {
+            const jsonStr = errorStr.substring(jsonStart);
+            const errorData = JSON.parse(jsonStr);
+            console.log('Parsed error data:', errorData);
+            
+            // Navigate through the nested structure to find the message
+            // The structure from the backend is: { success: false, data: { message: "..." } }
+            if (errorData.success === false && errorData.data) {
+              if (errorData.data.message) {
+                errorMsg = errorData.data.message;
+              } else if (errorData.data.errorMessage) {
+                errorMsg = errorData.data.errorMessage;
+              }
+            }
+            // Also check for other possible structures
+            else if (errorData.data?.data?.message) {
+              errorMsg = errorData.data.data.message;
+            } else if (errorData.data?.data?.errorMessage) {
+              errorMsg = errorData.data.data.errorMessage;
+            } else if (errorData.data?.message) {
+              errorMsg = errorData.data.message;
+            } else if (errorData.data?.errorMessage) {
+              errorMsg = errorData.data.errorMessage;
+            } else if (errorData.message) {
+              errorMsg = errorData.message;
+            }
+          }
+        } catch (parseError) {
+          console.log('Parse error:', parseError);
+          // Try to find Hebrew error messages directly in the error string
+          const hebrewPatterns = [
+            /לא נמצא משלוח מתאים לברקוד[^"]*/,
+            /המשלוח הנ"ל בוטל/,
+            /המשלוח הנ"ל סגור/,
+            /לא נתקבל ברקוד/,
+            /נקודת החלוקה במשלוח שונה/
+          ];
+          
+          for (const pattern of hebrewPatterns) {
+            const match = errorStr.match(pattern);
+            if (match) {
+              errorMsg = match[0].replace(/"/g, '');
+              // If no barcode was found in the message, append it
+              if (errorMsg.includes('לא נמצא משלוח מתאים לברקוד') && !errorMsg.includes(code)) {
+                errorMsg = `לא נמצא משלוח מתאים לברקוד: ${code}`;
+              }
+              break;
+            }
+          }
+        }
+      }
+      
+      // Always append barcode if the message is about not finding a shipment
+      if (errorMsg.includes('לא נמצא משלוח מתאים לברקוד') && !errorMsg.includes(code)) {
+        // Remove any trailing colon and add the barcode
+        errorMsg = errorMsg.replace(/:?\s*$/, '') + `: ${code}`;
+      }
+      
+      console.log('Final error message to display:', errorMsg);
+      
+      // Display error in modal instead of Alert
+      setErrorMessage(errorMsg);
+      setShowErrorModal(true);
+      setPackageInput('');
     } finally {
       setLoading(false);
     }
@@ -210,12 +376,21 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       const validExitZone = isNaN(exitZoneNum) ? 0 : exitZoneNum;
       
       // API call to close container - using the existing API format
-      await sortingAPI.closeContainer({
+      const closeResponse = await sortingAPI.closeContainer({
         sessionId: 1234, // This would come from user session in a real app
         driverId: 6001, // Driver ID from user session
         exitNumber: validExitZone,
         handcuffBarcode: containerPCC
       });
+
+      // Check if the closure was successful
+      if (!closeResponse.success || closeResponse.data?.hasError) {
+        const errorMsg = closeResponse.data?.message || closeResponse.data?.errorMessage || 'שגיאה בסגירת מארז';
+        setErrorMessage(errorMsg);
+        setShowErrorModal(true);
+        setLoading(false);
+        return;
+      }
 
       // Also record the packages that were added to the container
       // In a real implementation, this would be done through a different API endpoint
@@ -311,13 +486,14 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       <ScrollView style={styles.content}>
         {currentTab === 'input' ? (
           <View style={styles.inputContent}>
-            <Text style={styles.sectionTitle}>הקלד/סרוק איזקון</Text>
+            <Text style={styles.sectionTitle}>הקלד/סרוק PCC או איזקון</Text>
             <TextInput
               style={styles.input}
               value={showContainerDetails ? containerPCC : exitZone}
               onChangeText={showContainerDetails ? undefined : setExitZone}
-              placeholder="מספר איזקון"
-              keyboardType="numeric"
+              placeholder="PCC7463 או מספר איזקון"
+              keyboardType="default"
+              autoCapitalize="characters"
               editable={!showContainerDetails}
             />
 
@@ -363,13 +539,24 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
             </View>
             
             {scanMode === 'manual' && (
-              <TextInput
-                style={[styles.input, { marginTop: 20, marginHorizontal: 10 }]}
-                value={packageInput}
-                onChangeText={setPackageInput}
-                placeholder="הקלד/סרוק ברקוד חבילה"
-                onSubmitEditing={() => handleScanPackage()}
-              />
+              <View style={{ paddingHorizontal: 10 }}>
+                <TextInput
+                  style={[styles.input, { marginTop: 20 }]}
+                  value={packageInput}
+                  onChangeText={setPackageInput}
+                  placeholder="הקלד/סרוק ברקוד חבילה"
+                  onSubmitEditing={() => handleScanPackage()}
+                  autoFocus={true}
+                  keyboardType="numeric"
+                />
+                <TouchableOpacity 
+                  style={[styles.confirmButton, { marginTop: 10 }]}
+                  onPress={() => handleScanPackage()}
+                  disabled={!packageInput.trim() || loading}
+                >
+                  <Text style={styles.confirmButtonText}>הוסף חבילה</Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {/* Scanned Packages List */}
@@ -438,8 +625,13 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
         visible={showErrorModal}
         transparent={true}
         animationType="fade"
+        onRequestClose={() => setShowErrorModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowErrorModal(false)}
+        >
           <View style={styles.errorModal}>
             <TouchableOpacity 
               style={styles.modalClose}
@@ -450,8 +642,14 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
             <Text style={styles.errorModalTitle}>שים לב</Text>
             <Text style={styles.errorModalIcon}>✕</Text>
             <Text style={styles.errorModalMessage}>{errorMessage}</Text>
+            <TouchableOpacity 
+              style={[styles.confirmButton, { marginTop: 20 }]}
+              onPress={() => setShowErrorModal(false)}
+            >
+              <Text style={styles.confirmButtonText}>סגור</Text>
+            </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Warning Modal */}
