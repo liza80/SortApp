@@ -129,6 +129,8 @@ export interface CloseContainerRequest {
   driverId: number;
   exitNumber: number;
   handcuffBarcode: string;
+  containerNumber?: number;  // Optional: for direct container number
+  workerId?: number;         // Optional: worker ID for container closure
 }
 
 export interface CloseContainerResponse {

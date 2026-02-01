@@ -32,6 +32,8 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showWarningModal, setShowWarningModal] = useState(false);
+  const [showHandcuffModal, setShowHandcuffModal] = useState(false);
+  const [handcuffBarcode, setHandcuffBarcode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [exitZoneDetails, setExitZoneDetails] = useState<any>(null);
   const [showContainerDetails, setShowContainerDetails] = useState(false);
@@ -99,7 +101,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
     
     // If it's an Azikon input, we need to set a default exit zone
     if (isAzikonInput && exitZoneNum === 0) {
-      exitZoneNum = 1; // Default exit zone for Azikon containers
+      exitZoneNum = 0; // PCC containers don't have a fixed exit zone - use 0
     }
     
     console.log('🚀 Final values - exitZone:', exitZoneNum, 'distributionPoint:', distributionPointNum, 'PCC/Azikon:', pcc);
@@ -107,15 +109,18 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
     setLoading(true);
     try {
       
-      console.log('Creating container with CourierApi SortingController - distribution point:', distributionPointNum, 'PCC/Azikon:', pcc);
+      console.log('Creating container using createContainer endpoint - distribution point:', distributionPointNum, 'PCC/Azikon:', pcc);
       
-      // Call the container creation API from CourierApi's SortingController
+      // Use the actual working createContainer method from SortingController
       const response = await sortingAPI.createContainer({
-        sessionId: 1234, // This would come from user session in a real app
+        sessionId: 0,  // Optional
         driverId: 6001, // Driver ID from user session
-        exitZone: exitZoneNum,
+        containerPCC: pcc,
         distributionPoint: distributionPointNum,
-        containerPCC: pcc
+        exitZone: exitZoneNum,
+        exitNumber: exitZoneNum,
+        workerId: 6001,
+        branchId: 0
       });
 
       console.log('CreateContainer API response:', response);
@@ -185,7 +190,9 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
     }
   };
 
-  const handleProceedToScanning = () => {
+  const handleProceedToScanning = async () => {
+    // Skip initialization - not needed with the actual createContainer method
+    console.log('Container ready for packages. Moving to scanning tab...');
     setCurrentTab('scanning');
   };
 
@@ -219,15 +226,13 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
         return;
       }
       
-      // Call the addPackageToContainer API
-      const response = await sortingAPI.addPackageToContainer({
-        sessionId: 1234, // This would come from user session in a real app
-        driverId: 6001, // Driver ID from user session
-        packageBarcode: code,
-        containerPCC: containerPCC,
-        exitZone: exitZoneNum, // Always 0 for PCC containers
-        distributionPoint: distributionPointNum,
-        headerId: exitZoneDetails?.headerId
+      // Use containerRead method from SortingController - matches legacy flow exactly
+      // This properly inserts packages into RNFIL455
+      const response = await sortingAPI.containerRead({
+        sessionId: exitZoneDetails?.headerId || 0,  // Use headerId as session
+        driverId: 6001,
+        barcode: code,  // Package barcode
+        headerId: exitZoneDetails?.headerId || 0
       });
 
       if (response.success && response.data) {
@@ -361,26 +366,68 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
     }
   };
 
-  const handleCloseContainer = async () => {
+  // When user clicks "סיום", show handcuff scanning modal
+  const handleShowHandcuffModal = () => {
     if (scannedPackages.length === 0) {
       Alert.alert('שגיאה', 'לא ניתן לסגור מארז ללא חבילות');
+      return;
+    }
+    
+    // Show the handcuff scanning modal
+    setShowHandcuffModal(true);
+    setHandcuffBarcode('');
+  };
+
+  // Handle the actual container closure after scanning handcuff
+  const handleCloseContainer = async () => {
+    if (!handcuffBarcode.trim()) {
+      Alert.alert('שגיאה', 'נא לסרוק או להזין ברקוד אזיקון');
       return;
     }
 
     setLoading(true);
     try {
-      // Parse exitZone with proper validation
-      const exitZoneNum = parseInt(exitZone.trim(), 10);
+      const trimmedHandcuff = handcuffBarcode.trim().toUpperCase();
+      let finalHandcuffBarcode = trimmedHandcuff;
+      let internalContainerNumber = '';
       
-      // Use 0 as fallback if parsing fails (though it shouldn't at this point)
+      // Determine if we're dealing with PCC or internal barcode
+      // Legacy logic from PirokMarzLkriotZmni:
+      // 1. If starts with PCC/PCK, it's a PCC barcode
+      // 2. If numeric, it's an internal container number
+      
+      if (trimmedHandcuff.startsWith('PCC') || trimmedHandcuff.startsWith('PCK')) {
+        // It's a PCC barcode - we can also extract the container number from it
+        // e.g., "PCC099" -> container number is "099"
+        const numericPart = trimmedHandcuff.replace(/^(PCC|PCK)/, '');
+        if (/^\d+$/.test(numericPart)) {
+          internalContainerNumber = numericPart;
+        }
+        console.log('📦 Closing with PCC barcode:', trimmedHandcuff, 'Container#:', internalContainerNumber);
+      } else if (/^\d+$/.test(trimmedHandcuff)) {
+        // It's a pure numeric internal container barcode
+        internalContainerNumber = trimmedHandcuff;
+        // If we have a containerPCC from creation, use it; otherwise use the internal number
+        finalHandcuffBarcode = containerPCC || trimmedHandcuff;
+        console.log('📦 Closing with internal barcode:', internalContainerNumber);
+      } else {
+        // Unknown format - pass as is
+        console.log('📦 Closing with unknown format:', trimmedHandcuff);
+      }
+      
+      // For PCC containers, we use the distribution point instead of exit number
+      const distributionPointNum = parseInt(distributionPoint.trim(), 10) || 0;
+      
+      // Parse exitZone - may be 0 for PCC containers
+      const exitZoneNum = parseInt(exitZone.trim(), 10);
       const validExitZone = isNaN(exitZoneNum) ? 0 : exitZoneNum;
       
-      // API call to close container - using the existing API format
-      const closeResponse = await sortingAPI.closeContainer({
-        sessionId: 1234, // This would come from user session in a real app
-        driverId: 6001, // Driver ID from user session
+      // Use closeContainerSimple method from SortingController (bypasses problematic SgirtMarz)
+      const closeResponse = await sortingAPI.closeContainerSimple({
+        sessionId: 0, // Optional
+        driverId: 6001,
         exitNumber: validExitZone,
-        handcuffBarcode: containerPCC
+        handcuffBarcode: finalHandcuffBarcode
       });
 
       // Check if the closure was successful
@@ -388,6 +435,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
         const errorMsg = closeResponse.data?.message || closeResponse.data?.errorMessage || 'שגיאה בסגירת מארז';
         setErrorMessage(errorMsg);
         setShowErrorModal(true);
+        setShowHandcuffModal(false);
         setLoading(false);
         return;
       }
@@ -410,6 +458,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
         }]);
       }
 
+      setShowHandcuffModal(false);
       setShowSuccessModal(true);
     } catch (error) {
       console.error('Error closing container:', error);
@@ -491,7 +540,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
               style={styles.input}
               value={showContainerDetails ? containerPCC : exitZone}
               onChangeText={showContainerDetails ? undefined : setExitZone}
-              placeholder="PCC7463 או מספר איזקון"
+              placeholder=""
               keyboardType="default"
               autoCapitalize="characters"
               editable={!showContainerDetails}
@@ -502,7 +551,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
               style={styles.input}
               value={distributionPoint}
               onChangeText={showContainerDetails ? undefined : setDistributionPoint}
-              placeholder="מספר נקודה"
+            
               keyboardType="numeric"
               editable={!showContainerDetails}
             />
@@ -605,7 +654,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
           <>
             <TouchableOpacity 
               style={styles.confirmButton}
-              onPress={handleCloseContainer}
+              onPress={handleShowHandcuffModal}
               disabled={loading || scannedPackages.length === 0}
             >
               <Text style={styles.confirmButtonText}>סיום</Text>
@@ -680,6 +729,61 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
               onPress={() => setShowWarningModal(false)}
             >
               <Text style={styles.warningButtonText}>אישור</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Handcuff Modal - סרוק אזיקון לסגירת המארז */}
+      <Modal
+        visible={showHandcuffModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowHandcuffModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.warningModal}>
+            <TouchableOpacity 
+              style={styles.modalClose}
+              onPress={() => setShowHandcuffModal(false)}
+            >
+              <Text style={styles.modalCloseText}>✕</Text>
+            </TouchableOpacity>
+            
+            <Text style={styles.warningModalTitle}>סגירת מארז</Text>
+            
+            <Text style={styles.sectionTitle}>סרוק אזיקון לסגירת המארז</Text>
+            
+            <View style={styles.containerInfo}>
+              <Text style={styles.containerPCC}>{containerPCC}</Text>
+              <Text style={styles.containerNote}>*{scannedPackages.length} חבילות כולל</Text>
+            </View>
+            
+            <TextInput
+              style={[styles.input, { marginTop: 20, marginBottom: 20 }]}
+              value={handcuffBarcode}
+              onChangeText={setHandcuffBarcode}
+              placeholder="סרוק או הזן ברקוד אזיקון"
+              keyboardType="default"
+              autoFocus={true}
+              autoCapitalize="characters"
+            />
+            
+            <TouchableOpacity 
+              style={styles.confirmButton}
+              onPress={handleCloseContainer}
+              disabled={!handcuffBarcode.trim() || loading}
+            >
+              <Text style={styles.confirmButtonText}>
+                {loading ? 'סוגר מארז...' : 'סגור מארז'}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.cancelButton, { marginTop: 10 }]}
+              onPress={() => setShowHandcuffModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>ביטול</Text>
             </TouchableOpacity>
           </View>
         </View>

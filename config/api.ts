@@ -124,7 +124,7 @@ export const sortingAPI = {
   },
 
   /**
-   * Close container
+   * Close container (Original SgirtMarz method)
    * @param request - Container closure request
    * @returns API response
    */
@@ -143,6 +143,32 @@ export const sortingAPI = {
       return response.data;
     } catch (error) {
       console.error('Error closing container:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Close container SIMPLE (Direct database update method)
+   * Uses the new closecontainer-simple endpoint that bypasses SgirtMarz
+   * @param request - Container closure request
+   * @returns API response
+   */
+  closeContainerSimple: async (request: CloseContainerRequest): Promise<ApiResponse<CloseContainerResponse>> => {
+    try {
+      // Convert camelCase to PascalCase for C# backend
+      const backendRequest = {
+        SessionId: request.sessionId,
+        DriverId: request.driverId,
+        ExitNumber: request.exitNumber,
+        HandcuffBarcode: request.handcuffBarcode,
+        ContainerBarcode: request.handcuffBarcode,
+        ContainerNumber: request.containerNumber,
+        WorkerId: request.workerId
+      };
+      const response = await sortingApiClient.post<ApiResponse<CloseContainerResponse>>('/CloseContainer-Simple', backendRequest);
+      return response.data;
+    } catch (error) {
+      console.error('Error closing container (simple):', error);
       throw error;
     }
   },
@@ -182,15 +208,48 @@ export const sortingAPI = {
     }
   },
 
+
   /**
-   * Create new container
-   * @param request - Container creation request
+   * Initialize container with empty barcode scan
+   * CRITICAL: This must be called after createContainer and before adding packages
+   * This matches step 2 of legacy flow - empty barcode read
+   * @param request - Container initialization request
    * @returns API response
    */
-  createContainer: async (request: {
+  initializeContainer: async (request: {
     sessionId: number;
     driverId: number;
-    exitZone: number;
+    headerId: number;
+    distributionPoint: number;
+    sogBkra?: number;
+  }): Promise<ApiResponse<any>> => {
+    try {
+      const backendRequest = {
+        SessionId: request.sessionId,
+        DriverId: request.driverId,
+        HeaderId: request.headerId,
+        DistributionPoint: request.distributionPoint,
+        SogBkra: request.sogBkra || 803 // Default to 803 for containers
+      };
+      const response = await sortingApiClient.post<ApiResponse<any>>('/InitializeContainer', backendRequest);
+      return response.data;
+    } catch (error) {
+      console.error('Error initializing container:', error);
+      throw error;
+    }
+  },
+
+
+  /**
+   * End barcode reading session (legacy flow)
+   * Uses KlitaOsiomKriatBrkodim instead of SgirtMarz
+   * @param request - End barcode reading request
+   * @returns API response
+   */
+  endBarcodeReading: async (request: {
+    sessionId: number;
+    driverId: number;
+    sogBkra: number;
     distributionPoint: number;
     containerPCC: string;
   }): Promise<ApiResponse<any>> => {
@@ -198,11 +257,47 @@ export const sortingAPI = {
       const backendRequest = {
         SessionId: request.sessionId,
         DriverId: request.driverId,
-        ExitZone: request.exitZone,
+        SogBkra: request.sogBkra,
         DistributionPoint: request.distributionPoint,
         ContainerPCC: request.containerPCC
       };
-      const response = await sortingApiClient.post<ApiResponse<any>>('/CreateContainer', backendRequest);
+      const response = await sortingApiClient.post<ApiResponse<any>>('/EndBarcodeReading', backendRequest);
+      return response.data;
+    } catch (error) {
+      console.error('Error ending barcode reading:', error);
+      throw error;
+    }
+  },
+
+  // ACTUAL WORKING ENDPOINTS FROM SortingController
+
+  /**
+   * Create container using Magic ORM (OsptKotrtMarz)
+   * @param request - Container creation request
+   * @returns API response with HeaderId and ContainerNumber
+   */
+  createContainer: async (request: {
+    sessionId?: number;
+    driverId: number;
+    containerPCC: string;
+    distributionPoint: number;
+    exitZone?: number;
+    exitNumber?: number;
+    workerId?: number;
+    branchId?: number;
+  }): Promise<ApiResponse<any>> => {
+    try {
+      const backendRequest = {
+        SessionId: request.sessionId || 0,
+        DriverId: request.driverId,
+        ContainerPCC: request.containerPCC,
+        DistributionPoint: request.distributionPoint,
+        ExitZone: request.exitZone || 0,
+        ExitNumber: request.exitNumber || 0,
+        WorkerId: request.workerId || request.driverId,
+        BranchId: request.branchId || 0
+      };
+      const response = await sortingApiClient.post<ApiResponse<any>>('/createcontainer', backendRequest);
       return response.data;
     } catch (error) {
       console.error('Error creating container:', error);
@@ -211,30 +306,34 @@ export const sortingAPI = {
   },
 
   /**
-   * Add package to container
+   * Add package to container using Magic ORM (KriatBrkodM)
    * @param request - Package addition request
    * @returns API response
    */
   addPackageToContainer: async (request: {
-    sessionId: number;
+    sessionId?: number;
     driverId: number;
+    headerId: number;
     packageBarcode: string;
     containerPCC: string;
-    exitZone: number;
     distributionPoint?: number;
-    headerId?: number;
+    exitZone?: number;
+    exitNumber?: number;
+    workerId?: number;
   }): Promise<ApiResponse<any>> => {
     try {
       const backendRequest = {
-        SessionId: request.sessionId,
+        SessionId: request.sessionId || 0,
         DriverId: request.driverId,
+        HeaderId: request.headerId,
         PackageBarcode: request.packageBarcode,
         ContainerPCC: request.containerPCC,
-        ExitZone: request.exitZone,
-        DistributionPoint: request.distributionPoint,
-        HeaderId: request.headerId
+        DistributionPoint: request.distributionPoint || 0,
+        ExitZone: request.exitZone || 0,
+        ExitNumber: request.exitNumber || 0,
+        WorkerId: request.workerId || request.driverId
       };
-      const response = await sortingApiClient.post<ApiResponse<any>>('/AddPackageToContainer', backendRequest);
+      const response = await sortingApiClient.post<ApiResponse<any>>('/addpackagetocontainer', backendRequest);
       return response.data;
     } catch (error: any) {
       console.error('Error adding package to container:', error);
@@ -255,6 +354,57 @@ export const sortingAPI = {
     }
   },
 
+  /**
+   * Read barcode in container session (legacy flow mb_barcode_read)
+   * Empty barcode initializes, package barcode adds to container
+   * @param request - Container read request
+   * @returns API response
+   */
+  containerRead: async (request: {
+    sessionId: number;
+    driverId: number;
+    barcode: string; // Empty for init, package barcode for add
+    headerId: number;
+  }): Promise<ApiResponse<any>> => {
+    try {
+      // Convert to PascalCase for backend
+      const backendRequest = {
+        SessionId: request.sessionId,
+        DriverId: request.driverId,
+        Barcode: request.barcode,
+        HeaderId: request.headerId
+      };
+      console.log('Sending containerRead request:', backendRequest);
+      const response = await sortingApiClient.post<ApiResponse<any>>('/container/read', backendRequest);
+      return response.data;
+    } catch (error) {
+      console.error('Error reading container barcode:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * End container session (legacy flow mb_barcode_end)
+   * Does NOT create new containers!
+   * @param request - Container end request
+   * @returns API response
+   */
+  containerEnd: async (request: {
+    sessionId: number;
+    driverId: number;
+  }): Promise<ApiResponse<any>> => {
+    try {
+      const backendRequest = {
+        SessionId: request.sessionId,
+        DriverId: request.driverId
+      };
+      const response = await sortingApiClient.post<ApiResponse<any>>('/container/end', backendRequest);
+      return response.data;
+    } catch (error) {
+      console.error('Error ending container session:', error);
+      throw error;
+    }
+  }
 };
 
 // Shipments API for UpdateOperations

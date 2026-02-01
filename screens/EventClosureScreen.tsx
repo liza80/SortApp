@@ -106,6 +106,7 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
       
       console.log('Final request being sent:', request);
       
+      // Use the standard closeContainer endpoint (uses SgirtMarz)
       const response = await sortingAPI.closeContainer(request);
       
       // Response is wrapped in ApiResponse with data property
