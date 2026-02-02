@@ -355,6 +355,35 @@ export const sortingAPI = {
   },
 
   /**
+   * Start container session (legacy flow mb_barcode_start)
+   * Creates container and returns HeaderId
+   * @param request - Container start request
+   * @returns API response with HeaderId and SessionId
+   */
+  containerStart: async (request: {
+    driverId: number;
+    distributionPoint: number;
+    containerPCC: string;
+  }): Promise<ApiResponse<any>> => {
+    try {
+      const backendRequest = {
+        SessionId: 0, // Initial session, will be returned by server
+        DriverId: request.driverId,
+        Barcode: '', // Empty for initialization
+        HeaderId: 0, // Will be returned by server
+        DistributionPoint: request.distributionPoint,
+        ContainerPCC: request.containerPCC
+      };
+      console.log('Sending containerStart request:', backendRequest);
+      const response = await sortingApiClient.post<ApiResponse<any>>('/container/start', backendRequest);
+      return response.data;
+    } catch (error) {
+      console.error('Error starting container session:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Read barcode in container session (legacy flow mb_barcode_read)
    * Empty barcode initializes, package barcode adds to container
    * @param request - Container read request

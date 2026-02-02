@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, Scro
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
-import { sortingAPI, shipmentsAPI } from '../config/api';
+import { sortingAPI, shipmentsAPI, operationalAppAPI } from '../config/api';
 
 type CreateContainerScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CreateContainer'>;
 type CreateContainerScreenRouteProp = RouteProp<RootStackParamList, 'CreateContainer'>;
@@ -109,18 +109,13 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
     setLoading(true);
     try {
       
-      console.log('Creating container using createContainer endpoint - distribution point:', distributionPointNum, 'PCC/Azikon:', pcc);
+      console.log('Using LEGACY FLOW - container/start endpoint');
       
-      // Use the actual working createContainer method from SortingController
-      const response = await sortingAPI.createContainer({
-        sessionId: 0,  // Optional
+      // Use the new legacy flow endpoints - mb_barcode_start equivalent
+      const response = await sortingAPI.containerStart({
         driverId: 6001, // Driver ID from user session
-        containerPCC: pcc,
         distributionPoint: distributionPointNum,
-        exitZone: exitZoneNum,
-        exitNumber: exitZoneNum,
-        workerId: 6001,
-        branchId: 0
+        containerPCC: pcc
       });
 
       console.log('CreateContainer API response:', response);
@@ -141,16 +136,27 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
           console.log('✅ Successfully got HeaderId:', headerId);
         }
         
-        setExitZoneDetails({
-          exitNumber: exitZone,
-          distributionPoint: distributionPoint,
-          description: `צ'יטה שופט חולון - ${distributionPoint}`,
-          area: 'אריה שגריר 4, חולון',
-          line: '480',
-          routeNumber: '11',
-          floorNumber: exitZoneNum.toString() || '12',
-          headerId: headerId // Store the HeaderId for package addition
-        });
+                // Get real location data from the API response - NO FAKE DEFAULTS!
+                let branchCode = response.data?.branch || response.data?.Branch || '';
+                let areaCode = response.data?.distributionArea || response.data?.DistributionArea || '';
+                let lineCode = response.data?.line || response.data?.Line || '';
+                
+                console.log('📍 Location data from API:', {
+                  branchCode,
+                  areaCode,
+                  lineCode
+                });
+                
+                setExitZoneDetails({
+                  exitNumber: exitZone,
+                  distributionPoint: distributionPoint,
+                  description: `צ'יטה שופט חולון - ${distributionPoint}`,
+                  area: 'אריה שגריר 4, חולון',
+                  line: lineCode,
+                  routeNumber: branchCode,
+                  floorNumber: areaCode,
+                  headerId: headerId // Store the HeaderId for package addition
+                });
 
         setShowContainerDetails(true);
       } else {
@@ -235,20 +241,99 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
         headerId: exitZoneDetails?.headerId || 0
       });
 
-      if (response.success && response.data) {
-        // Check if package is on wrong line
-        if (response.data.isWrongLine) {
-          setErrorMessage(`חבילה ${code}\nמיועדת לקו: ${response.data.correctLine}\nאנא הנח אותה בצד ואל תכניס לשק`);
+      if (response.success) {
+        // Log the entire response to see what we're getting
+        console.log('📦 Full API Response:', JSON.stringify(response, null, 2));
+        console.log('📦 Response keys:', Object.keys(response));
+        console.log('📦 Response.data:', response.data);
+        
+        // Check if package is on wrong line  
+        // When success=true, check for wrong line from either data or root
+        if (response.data?.isWrongLine || (response as any).isWrongLine) {
+          const correctLine = response.data?.correctLine || (response as any).correctLine;
+          setErrorMessage(`חבילה ${code}\nמיועדת לקו: ${correctLine}\nאנא הנח אותה בצד ואל תכניס לשק`);
           setShowErrorModal(true);
           setPackageInput('');
           return;
         }
 
         // Add package to list with real data from API
+        // The response has nested data structure: response.data.data contains the actual fields
+        const responseData = response.data?.data || response.data || {};
+        const address = responseData.address || responseData.Address || '';
+        const customer = responseData.customerName || responseData.CustomerName || '';
+        
+        // Call FindShipmentsByID to get real location data - EXACTLY like EventClosureScreen!
+        // Always call for every package to get location data
+        try {
+          console.log('🔍 Calling FindShipmentsByID with barcode:', code);
+          const shipmentResponse = await operationalAppAPI.getShipmentByNumber(code);
+            console.log('📦 Full FindShipmentsByID response:', JSON.stringify(shipmentResponse, null, 2));
+
+            if (shipmentResponse && shipmentResponse.data) {
+              // The response structure might be different - let's check both array and single object
+              const shipmentData = Array.isArray(shipmentResponse.data) 
+                ? shipmentResponse.data[0] 
+                : shipmentResponse.data;
+                
+              if (shipmentData) {
+                const shipment = shipmentData as any; // Cast to any to access all properties
+                console.log('📋 Shipment data structure:', Object.keys(shipment));
+                console.log('📋 Full shipment data:', JSON.stringify(shipment, null, 2));
+                
+                // Try different field names that might contain location data
+                const lineCode = shipment.distributionLine || 
+                                shipment.DistributionLine || 
+                                shipment.line || 
+                                shipment.Line || '';
+                                
+                const areaCode = shipment.distributionArea || 
+                                shipment.DistributionArea || 
+                                shipment.area || 
+                                shipment.Area || '';
+                                
+                const segmentCode = shipment.distributionSegment || 
+                                   shipment.DistributionSegment || 
+                                   shipment.branch || 
+                                   shipment.Branch || 
+                                   shipment.segment || 
+                                   shipment.Segment || '';
+                
+                console.log('📍 Extracted location data:', {
+                  line: lineCode,
+                  area: areaCode,  
+                  segment: segmentCode
+                });
+
+                // Update exit zone details with real location data
+                if (exitZoneDetails && (lineCode || areaCode || segmentCode)) {
+                  const updatedDetails = {
+                    ...exitZoneDetails,
+                    routeNumber: segmentCode ? segmentCode.toString() : exitZoneDetails.routeNumber,
+                    floorNumber: areaCode ? areaCode.toString() : exitZoneDetails.floorNumber,
+                    line: lineCode ? lineCode.toString() : exitZoneDetails.line
+                  };
+                  console.log('✅ Updating exitZoneDetails:', updatedDetails);
+                  setExitZoneDetails(updatedDetails);
+                } else {
+                  console.log('⚠️ No location data found in shipment response');
+                }
+              }
+            } else {
+              console.log('⚠️ No data in FindShipmentsByID response');
+            }
+          } catch (shipmentError) {
+            console.error('❌ Error fetching shipment details from FindShipmentsByID:', shipmentError);
+            console.log('Continuing with data from containerRead response only');
+          }
+        
+        console.log('📍 Address found:', address);
+        console.log('👤 Customer found:', customer);
+        
         const newPackage: ScannedPackage = {
           barcode: code,
-          address: response.data.address || 'ארלוזורוב 220, תל אביב',
-          customer: response.data.customerName || 'ישראל ישראלי',
+          address: address,
+          customer: customer,
           timestamp: new Date()
         };
 
@@ -566,15 +651,21 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
                 </Text>
                 
                 <View style={styles.routeButtonsContainer}>
-                  <View style={styles.routeButtonBlack}>
-                    <Text style={styles.routeButtonText}>סניף {exitZoneDetails.routeNumber}</Text>
-                  </View>
-                  <View style={styles.routeButtonBlack}>
-                    <Text style={styles.routeButtonText}>אזור הפצה {exitZoneDetails.floorNumber}</Text>
-                  </View>
-                  <View style={styles.routeButtonBlack}>
-                    <Text style={styles.routeButtonText}>קו {exitZoneDetails.line}</Text>
-                  </View>
+                  {exitZoneDetails.routeNumber ? (
+                    <View style={styles.routeButtonBlack}>
+                      <Text style={styles.routeButtonText}>סניף {exitZoneDetails.routeNumber}</Text>
+                    </View>
+                  ) : null}
+                  {exitZoneDetails.floorNumber ? (
+                    <View style={styles.routeButtonBlack}>
+                      <Text style={styles.routeButtonText}>אזור הפצה {exitZoneDetails.floorNumber}</Text>
+                    </View>
+                  ) : null}
+                  {exitZoneDetails.line ? (
+                    <View style={styles.routeButtonBlack}>
+                      <Text style={styles.routeButtonText}>קו {exitZoneDetails.line}</Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             )}
