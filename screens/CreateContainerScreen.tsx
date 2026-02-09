@@ -4,6 +4,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import { sortingAPI, shipmentsAPI, operationalAppAPI } from '../config/api';
+import AppBarcodeScanner from '../components/AppBarcodeScanner';
+import ActionButton from '../components/ActionButton';
 
 type CreateContainerScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CreateContainer'>;
 type CreateContainerScreenRouteProp = RouteProp<RootStackParamList, 'CreateContainer'>;
@@ -28,6 +30,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
   const [scanMode, setScanMode] = useState<'manual' | 'barcode'>('manual');
   const [packageInput, setPackageInput] = useState('');
   const [scannedPackages, setScannedPackages] = useState<ScannedPackage[]>([]);
+  const [failedPackages, setFailedPackages] = useState<string[]>([]); // Track failed package barcodes
   const [loading, setLoading] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -37,6 +40,8 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
   const [errorMessage, setErrorMessage] = useState('');
   const [exitZoneDetails, setExitZoneDetails] = useState<any>(null);
   const [showContainerDetails, setShowContainerDetails] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerMode, setScannerMode] = useState<'package' | 'handcuff'>('package');
 
   const handleConfirmContainerDetails = async () => {
     console.log('handleConfirmContainerDetails called');
@@ -262,6 +267,11 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
           errorMsg = errorMsg.replace(/:?\s*$/, '') + `: ${code}`;
         }
         
+        // Add to failed packages list
+        if (!failedPackages.includes(code)) {
+          setFailedPackages([...failedPackages, code]);
+        }
+        
         console.log('API returned error:', errorMsg);
         setErrorMessage(errorMsg);
         setShowErrorModal(true);
@@ -279,6 +289,12 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
         // When success=true, check for wrong line from either data or root
         if (response.data?.isWrongLine || (response as any).isWrongLine) {
           const correctLine = response.data?.correctLine || (response as any).correctLine;
+          
+          // Add to failed packages list (wrong line packages)
+          if (!failedPackages.includes(code)) {
+            setFailedPackages([...failedPackages, code]);
+          }
+          
           setErrorMessage(`חבילה ${code}\nמיועדת לקו: ${correctLine}\nאנא הנח אותה בצד ואל תכניס לשק`);
           setShowErrorModal(true);
           setPackageInput('');
@@ -470,6 +486,11 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       
       console.log('Final error message to display:', errorMsg);
       
+      // Add to failed packages list
+      if (!failedPackages.includes(code)) {
+        setFailedPackages([...failedPackages, code]);
+      }
+      
       // Display error in modal instead of Alert
       setErrorMessage(errorMsg);
       setShowErrorModal(true);
@@ -616,12 +637,12 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       <View style={styles.tabContainer}>
         <View style={[styles.tab, currentTab === 'input' && styles.activeTab]}>
           <Text style={[styles.tabText, currentTab === 'input' && styles.activeTabText]}>
-            ({currentTab === 'scanning' ? '1' : '0'}) כשל(ו)
+            כשלו ({failedPackages.length})
           </Text>
         </View>
         <View style={[styles.tab, currentTab === 'scanning' && styles.activeTab]}>
           <Text style={[styles.tabText, currentTab === 'scanning' && styles.activeTabText]}>
-            ({scannedPackages.length}) נסרק(ו)
+            נסרקו ({scannedPackages.length})
           </Text>
           {currentTab === 'scanning' && (
             <View style={styles.activeTabIndicator} />
@@ -630,25 +651,44 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       </View>
 
 
-      {/* Toggle Buttons for Input Mode */}
-      <View style={styles.toggleContainer}>
-        <TouchableOpacity
-          style={[styles.toggleButton, scanMode === 'manual' && styles.toggleButtonActive]}
-          onPress={() => setScanMode('manual')}
-        >
-          <Text style={[styles.toggleButtonText, scanMode === 'manual' && styles.toggleButtonTextActive]}>
-            📋 הזנה ידנית
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.toggleButton, scanMode === 'barcode' && styles.toggleButtonActive]}
-          onPress={() => setScanMode('barcode')}
-        >
-          <Text style={[styles.toggleButtonText, scanMode === 'barcode' && styles.toggleButtonTextActive]}>
-            📷 סריקת ברקוד
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {/* Action Buttons - Show on both tabs */}
+      {currentTab === 'input' && !showContainerDetails ? (
+        <View style={styles.actionButtonsRow}>
+          <ActionButton
+            type="manual"
+            onPress={() => {
+              // Manual entry is already active
+            }}
+            label="הזנה ידנית"
+          />
+          
+          <ActionButton
+            type="barcode"
+            onPress={() => {
+              setScannerMode('handcuff'); // Use handcuff mode for container PCC
+              setShowScanner(true);
+            }}
+            label="סריקת ברקוד"
+          />
+        </View>
+      ) : currentTab === 'scanning' ? (
+        <View style={styles.actionButtonsRow}>
+          <ActionButton
+            type="manual"
+            onPress={() => setScanMode('manual')}
+            label="הזנה ידנית"
+          />
+          
+          <ActionButton
+            type="barcode"
+            onPress={() => {
+              setScannerMode('package');
+              setShowScanner(true);
+            }}
+            label="סריקה ברקוד"
+          />
+        </View>
+      ) : null}
 
       {/* Content */}
       <ScrollView style={styles.content}>
@@ -712,7 +752,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
               <Text style={styles.scanTitle}>סריקת חבילות למארז</Text>
             </View>
             
-            {scanMode === 'manual' && (
+            {scanMode === 'manual' ? (
               <View style={{ paddingHorizontal: 10 }}>
                 <TextInput
                   style={[styles.input, { marginTop: 20 }]}
@@ -729,6 +769,18 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
                   disabled={!packageInput.trim() || loading}
                 >
                   <Text style={styles.confirmButtonText}>הוסף חבילה</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ paddingHorizontal: 10 }}>
+                <TouchableOpacity 
+                  style={[styles.confirmButton, { marginTop: 20, backgroundColor: '#0066CC' }]}
+                  onPress={() => {
+                    setScannerMode('package');
+                    setShowScanner(true);
+                  }}
+                >
+                  <Text style={styles.confirmButtonText}>📷 פתח סורק ברקוד</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -943,6 +995,41 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
           </View>
         </View>
       </Modal>
+
+      {/* Barcode Scanner Modal */}
+      <Modal
+        visible={showScanner}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowScanner(false)}
+      >
+        <SafeAreaView style={styles.scannerContainer}>
+          <View style={styles.scannerHeader}>
+            <TouchableOpacity 
+              onPress={() => setShowScanner(false)}
+              style={styles.scannerCloseButton}
+            >
+              <Text style={styles.scannerCloseText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.scannerTitle}>
+              סריקת {scannerMode === 'package' ? 'חבילה' : 'אזיקון'}
+            </Text>
+          </View>
+          
+          <AppBarcodeScanner 
+            onBarcodeScanned={(code) => {
+              console.log('Scanned barcode:', code);
+              if (scannerMode === 'package') {
+                handleScanPackage(code);
+              } else {
+                setHandcuffBarcode(code);
+              }
+              setShowScanner(false);
+            }}
+            handleNoPermission={() => setShowScanner(false)}
+          />
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -955,14 +1042,14 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#87CEEB',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',  // Reverse the row direction for RTL
     alignItems: 'center',
     padding: 15,
     paddingTop: 10,
   },
   backButton: {
     padding: 5,
-    marginRight: 10,
+    marginLeft: 10,  // Changed from marginRight to marginLeft
   },
   backArrow: {
     fontSize: 24,
@@ -975,7 +1062,7 @@ const styles = StyleSheet.create({
     color: '#000',
     flex: 1,
     textAlign: 'center',
-    marginRight: 40,
+    marginLeft: 40,  // Changed from marginRight to marginLeft
   },
   tabContainer: {
     flexDirection: 'row',
@@ -1383,5 +1470,61 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
+  },
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  scannerHeader: {
+    backgroundColor: '#87CEEB',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  scannerCloseButton: {
+    position: 'absolute',
+    left: 20,
+    padding: 5,
+  },
+  scannerCloseText: {
+    fontSize: 24,
+    color: '#000',
+  },
+  scannerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    gap: 15,
+    backgroundColor: '#FFFFFF',
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#0088FF',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    gap: 8,
+  },
+  actionButtonIcon: {
+    fontSize: 20,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    color: '#0088FF',
+    fontWeight: '600',
   },
 });
