@@ -119,19 +119,27 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       });
 
       console.log('CreateContainer API response:', response);
+      console.log('📋 Response data structure:', response.data ? Object.keys(response.data) : 'No data');
+      console.log('📋 Full response data:', JSON.stringify(response.data, null, 2));
 
       if (response.success) {
         setContainerPCC(pcc);
         
         // Set exit zone details (simulate response since the new API doesn't return detailed info)
         // Get HeaderId from the response - this is critical!
-        const headerId = response.data?.headerId || 
+        // The response has nested structure: response.data.data contains the actual fields
+        const headerId = response.data?.data?.headerId ||  // Try nested structure first (most common)
+                        response.data?.data?.HeaderId || 
+                        response.data?.headerId ||  // Try direct access
                         response.data?.HeaderId || 
                         response.data?.headerID || 
                         0;
         
         if (headerId === 0) {
-          console.error('ERROR: No HeaderId returned from container creation!');
+          console.error('❌ ERROR: No HeaderId returned from container creation!');
+          console.error('Available fields in response.data:', response.data ? Object.keys(response.data) : 'No data');
+          Alert.alert('שגיאה', 'לא התקבל מזהה מארז מהשרת. נסה שנית.');
+          return;
         } else {
           console.log('✅ Successfully got HeaderId:', headerId);
         }
@@ -234,12 +242,32 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       
       // Use containerRead method from SortingController - matches legacy flow exactly
       // This properly inserts packages into RNFIL455
+      // We need to pass containerPCC and distributionPoint for the backend
       const response = await sortingAPI.containerRead({
         sessionId: exitZoneDetails?.headerId || 0,  // Use headerId as session
         driverId: 6001,
         barcode: code,  // Package barcode
-        headerId: exitZoneDetails?.headerId || 0
+        headerId: exitZoneDetails?.headerId || 0,
+        distributionPoint: parseInt(distributionPoint, 10) || 0,
+        containerPCC: containerPCC
       });
+
+      // IMPORTANT: Check for API error response (when success is false)
+      if (!response.success) {
+        // Handle error response when success is false
+        let errorMsg = response.data?.message || response.data?.errorMessage || 'אירעה שגיאה בהוספת החבילה';
+        
+        // Always append barcode if the message is about not finding a shipment
+        if (errorMsg.includes('לא נמצא משלוח מתאים לברקוד') && !errorMsg.includes(code)) {
+          errorMsg = errorMsg.replace(/:?\s*$/, '') + `: ${code}`;
+        }
+        
+        console.log('API returned error:', errorMsg);
+        setErrorMessage(errorMsg);
+        setShowErrorModal(true);
+        setPackageInput('');
+        return;
+      }
 
       if (response.success) {
         // Log the entire response to see what we're getting
@@ -507,23 +535,29 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       const exitZoneNum = parseInt(exitZone.trim(), 10);
       const validExitZone = isNaN(exitZoneNum) ? 0 : exitZoneNum;
       
-      // Use closeContainerSimple method from SortingController (bypasses problematic SgirtMarz)
-      const closeResponse = await sortingAPI.closeContainerSimple({
-        sessionId: 0, // Optional
+      // Use containerEnd method for the legacy flow (container/start, container/read, container/end)
+      // This properly ends the container session and marks it as closed
+      console.log('📦 Calling containerEnd with sessionId:', exitZoneDetails?.headerId, 'handcuffBarcode:', finalHandcuffBarcode);
+      
+      const closeResponse = await sortingAPI.containerEnd({
+        sessionId: exitZoneDetails?.headerId || 0, // Use the headerId from container creation
         driverId: 6001,
-        exitNumber: validExitZone,
-        handcuffBarcode: finalHandcuffBarcode
+        distributionPoint: parseInt(distributionPoint.trim(), 10) || 0, // Add the required distributionPoint
+        exitId: validExitZone // Optional exit ID
       });
 
       // Check if the closure was successful
       if (!closeResponse.success || closeResponse.data?.hasError) {
         const errorMsg = closeResponse.data?.message || closeResponse.data?.errorMessage || 'שגיאה בסגירת מארז';
+        console.error('Container end failed:', errorMsg);
         setErrorMessage(errorMsg);
         setShowErrorModal(true);
         setShowHandcuffModal(false);
         setLoading(false);
         return;
       }
+      
+      console.log('✅ Container ended successfully');
 
       // Also record the packages that were added to the container
       // In a real implementation, this would be done through a different API endpoint

@@ -394,38 +394,61 @@ export const sortingAPI = {
     driverId: number;
     barcode: string; // Empty for init, package barcode for add
     headerId: number;
+    distributionPoint?: number; // Optional for compatibility
+    containerPCC?: string; // Optional for compatibility
   }): Promise<ApiResponse<any>> => {
     try {
-      // Convert to PascalCase for backend
+      // Convert to PascalCase for backend - must match ContainerBarcodeRequest exactly
       const backendRequest = {
         SessionId: request.sessionId,
         DriverId: request.driverId,
         Barcode: request.barcode,
-        HeaderId: request.headerId
+        HeaderId: request.headerId,
+        DistributionPoint: request.distributionPoint || 0, // Use passed value or default
+        ContainerPCC: request.containerPCC || '' // Use passed value or default
       };
       console.log('Sending containerRead request:', backendRequest);
       const response = await sortingApiClient.post<ApiResponse<any>>('/container/read', backendRequest);
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error reading container barcode:', error);
+      
+      // If it's an axios error with response data, extract and return the error response
+      if (error.response?.data) {
+        console.log('Axios error response data:', error.response.data);
+        
+        // Return the error response data so the component can handle it properly
+        // This allows the component to access success=false and the error message
+        return error.response.data;
+      }
+      
+      // Re-throw the error for other cases
       throw error;
     }
   },
 
   /**
    * End container session (legacy flow mb_barcode_end)
-   * Does NOT create new containers!
+   * Creates container in RNFIL454 if parameters are provided
    * @param request - Container end request
    * @returns API response
    */
   containerEnd: async (request: {
     sessionId: number;
     driverId: number;
+    distributionPoint?: number;
+    exitId?: number;
   }): Promise<ApiResponse<any>> => {
     try {
       const backendRequest = {
         SessionId: request.sessionId,
-        DriverId: request.driverId
+        DriverId: request.driverId,
+        DistributionPoint: request.distributionPoint || 0,
+        ExitId: request.exitId || 0,
+        // Add required properties with default values for ContainerBarcodeRequest
+        Barcode: '', // Empty for end operation
+        HeaderId: 0, // Will be filled by backend if needed
+        ContainerPCC: '' // Empty for end operation
       };
       const response = await sortingApiClient.post<ApiResponse<any>>('/container/end', backendRequest);
       return response.data;
