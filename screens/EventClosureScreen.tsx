@@ -5,6 +5,7 @@ import { RootStackParamList } from '../App';
 import { sortingAPI, operationalAppAPI } from '../config/api';
 import { CloseContainerRequest, CloseContainerResponse } from '../types/api.types';
 import AppBarcodeScanner from '../components/AppBarcodeScanner';
+import ActionButton from '../components/ActionButton';
 
 type EventClosureScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'EventClosure'>;
 
@@ -353,18 +354,17 @@ export default function EventClosureScreen({ navigation }: EventClosureScreenPro
 
       {/* Action Buttons */}
       <View style={styles.actionButtonsRow}>
-        <TouchableOpacity style={styles.actionButton}>
-          <Text style={styles.actionButtonIcon}>📋</Text>
-          <Text style={styles.actionButtonText}>הזנה ידנית</Text>
-        </TouchableOpacity>
+        <ActionButton
+          type="manual"
+          onPress={() => {}}
+          label="הזנה ידנית"
+        />
         
-        <TouchableOpacity 
-          style={styles.actionButton}
+        <ActionButton
+          type="barcode"
           onPress={() => openBarcodeScanner('etiquette')}
-        >
-          <Text style={styles.actionButtonIcon}>📷</Text>
-          <Text style={styles.actionButtonText}>סריקה ברקוד</Text>
-        </TouchableOpacity>
+          label="סריקה ברקוד"
+        />
       </View>
 
       {/* Content */}

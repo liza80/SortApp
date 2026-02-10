@@ -233,6 +233,92 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
 
     setLoading(true);
     try {
+      // First, fetch shipment details to validate and get customer/address info
+      console.log('🔍 Fetching shipment details for validation, barcode:', code);
+      const shipmentResponse = await operationalAppAPI.getShipmentByNumber(code);
+      
+      console.log('📦 Full FindShipmentsByID response:', JSON.stringify(shipmentResponse, null, 2));
+      
+      // Initialize with empty values for each scan - IMPORTANT: Reset for each package
+      let shipmentAddress = '';
+      let shipmentCustomer = '';
+      let shipmentDistributionPoint = 0;
+      let hasValidShipment = false;
+      
+      if (shipmentResponse && shipmentResponse.success && shipmentResponse.data && shipmentResponse.data.length > 0) {
+        const firstShipmentData = shipmentResponse.data[0];
+        
+        // Extract shipment details
+        if (firstShipmentData.shipment) {
+          const shipment = firstShipmentData.shipment;
+          hasValidShipment = true;
+          
+          // Get customer name and address - these should be unique per shipment
+          shipmentCustomer = shipment.customerName || '';
+          shipmentAddress = shipment.destinationAddress || '';
+          
+          console.log(`📦 Package ${code} - Customer: "${shipmentCustomer}", Address: "${shipmentAddress}"`);
+        }
+        
+        // Check for PUDO info - this is the primary source for distribution point
+        if (firstShipmentData.pudo) {
+          const pudo = firstShipmentData.pudo;
+          
+          // PUDO ID is the primary field for distribution point validation
+          if (pudo.pudoId) {
+            shipmentDistributionPoint = typeof pudo.pudoId === 'string' ? parseInt(pudo.pudoId, 10) : pudo.pudoId || 0;
+          }
+          
+          // Only override with PUDO info if shipment doesn't have the data
+          if (!shipmentAddress && pudo.pudoAddress) {
+            shipmentAddress = pudo.pudoAddress;
+            console.log(`📦 Package ${code} - Using PUDO address: "${shipmentAddress}"`);
+          }
+          if (!shipmentCustomer && pudo.pudoName) {
+            shipmentCustomer = pudo.pudoName;
+            console.log(`📦 Package ${code} - Using PUDO name: "${shipmentCustomer}"`);
+          }
+        }
+        
+        // If no pudoId found, fallback to shipment fields
+        if (!shipmentDistributionPoint && firstShipmentData.shipment) {
+          const shipment = firstShipmentData.shipment;
+          shipmentDistributionPoint = shipment.distributionArea || 
+                                     shipment.distributionLine || 
+                                     0;
+        }
+        
+        console.log('📋 Extracted shipment info:', {
+          customer: shipmentCustomer,
+          address: shipmentAddress,
+          distributionPoint: shipmentDistributionPoint
+        });
+      }
+      
+      // Validate that we found the shipment
+      if (!hasValidShipment) {
+        setErrorMessage(`לא נמצא משלוח מתאים לברקוד: ${code}`);
+        setShowErrorModal(true);
+        setPackageInput('');
+        setFailedPackages([...failedPackages, code]);
+        setLoading(false);
+        return;
+      }
+      
+      // Validate distribution point matches container's distribution point
+      const containerDistributionPoint = parseInt(distributionPoint.trim(), 10);
+      
+      if (shipmentDistributionPoint && shipmentDistributionPoint !== containerDistributionPoint) {
+        // Distribution point mismatch - show error
+        const errorMsg = `חבילה ${code}\nמיועדת לנק׳ ${shipmentDistributionPoint}\nאנא הנח אותה בצד ואל תכניס לשק`;
+        setErrorMessage(errorMsg);
+        setShowErrorModal(true);
+        setPackageInput('');
+        setFailedPackages([...failedPackages, code]);
+        setLoading(false);
+        return;
+      }
+      
       // When using PCC containers, exit zone is not needed - use 0
       const exitZoneNum = 0; // PCC containers don't need explicit exit zone
       const distributionPointNum = parseInt(distributionPoint.trim(), 10);
@@ -301,83 +387,15 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
           return;
         }
 
-        // Add package to list with real data from API
-        // The response has nested data structure: response.data.data contains the actual fields
-        const responseData = response.data?.data || response.data || {};
-        const address = responseData.address || responseData.Address || '';
-        const customer = responseData.customerName || responseData.CustomerName || '';
-        
-        // Call FindShipmentsByID to get real location data - EXACTLY like EventClosureScreen!
-        // Always call for every package to get location data
-        try {
-          console.log('🔍 Calling FindShipmentsByID with barcode:', code);
-          const shipmentResponse = await operationalAppAPI.getShipmentByNumber(code);
-            console.log('📦 Full FindShipmentsByID response:', JSON.stringify(shipmentResponse, null, 2));
-
-            if (shipmentResponse && shipmentResponse.data) {
-              // The response structure might be different - let's check both array and single object
-              const shipmentData = Array.isArray(shipmentResponse.data) 
-                ? shipmentResponse.data[0] 
-                : shipmentResponse.data;
-                
-              if (shipmentData) {
-                const shipment = shipmentData as any; // Cast to any to access all properties
-                console.log('📋 Shipment data structure:', Object.keys(shipment));
-                console.log('📋 Full shipment data:', JSON.stringify(shipment, null, 2));
-                
-                // Try different field names that might contain location data
-                const lineCode = shipment.distributionLine || 
-                                shipment.DistributionLine || 
-                                shipment.line || 
-                                shipment.Line || '';
-                                
-                const areaCode = shipment.distributionArea || 
-                                shipment.DistributionArea || 
-                                shipment.area || 
-                                shipment.Area || '';
-                                
-                const segmentCode = shipment.distributionSegment || 
-                                   shipment.DistributionSegment || 
-                                   shipment.branch || 
-                                   shipment.Branch || 
-                                   shipment.segment || 
-                                   shipment.Segment || '';
-                
-                console.log('📍 Extracted location data:', {
-                  line: lineCode,
-                  area: areaCode,  
-                  segment: segmentCode
-                });
-
-                // Update exit zone details with real location data
-                if (exitZoneDetails && (lineCode || areaCode || segmentCode)) {
-                  const updatedDetails = {
-                    ...exitZoneDetails,
-                    routeNumber: segmentCode ? segmentCode.toString() : exitZoneDetails.routeNumber,
-                    floorNumber: areaCode ? areaCode.toString() : exitZoneDetails.floorNumber,
-                    line: lineCode ? lineCode.toString() : exitZoneDetails.line
-                  };
-                  console.log('✅ Updating exitZoneDetails:', updatedDetails);
-                  setExitZoneDetails(updatedDetails);
-                } else {
-                  console.log('⚠️ No location data found in shipment response');
-                }
-              }
-            } else {
-              console.log('⚠️ No data in FindShipmentsByID response');
-            }
-          } catch (shipmentError) {
-            console.error('❌ Error fetching shipment details from FindShipmentsByID:', shipmentError);
-            console.log('Continuing with data from containerRead response only');
-          }
-        
-        console.log('📍 Address found:', address);
-        console.log('👤 Customer found:', customer);
+        // Use the customer and address from the first FindShipmentsByID call
+        // We already have this data from validation, no need to call API again
+        console.log('📍 Using address from validation:', shipmentAddress);
+        console.log('👤 Using customer from validation:', shipmentCustomer);
         
         const newPackage: ScannedPackage = {
           barcode: code,
-          address: address,
-          customer: customer,
+          address: shipmentAddress,  // Use from first API call
+          customer: shipmentCustomer, // Use from first API call
           timestamp: new Date()
         };
 
@@ -694,7 +712,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       <ScrollView style={styles.content}>
         {currentTab === 'input' ? (
           <View style={styles.inputContent}>
-            <Text style={styles.sectionTitle}>הקלד/סרוק PCC או איזקון</Text>
+            <Text style={styles.sectionTitle}>הקלד/סרוק אזיקון</Text>
             <TextInput
               style={styles.input}
               value={showContainerDetails ? containerPCC : exitZone}
