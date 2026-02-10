@@ -518,14 +518,20 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
     }
   };
 
-  // When user clicks "סיום", show handcuff scanning modal
+  // When user clicks "סיום", show warning modal first
   const handleShowHandcuffModal = () => {
     if (scannedPackages.length === 0) {
       Alert.alert('שגיאה', 'לא ניתן לסגור מארז ללא חבילות');
       return;
     }
     
-    // Show the handcuff scanning modal
+    // Show warning modal first before handcuff scanning
+    setShowWarningModal(true);
+  };
+
+  // After confirming warning, show the handcuff scanning modal
+  const handleWarningConfirm = () => {
+    setShowWarningModal(false);
     setShowHandcuffModal(true);
     setHandcuffBarcode('');
   };
@@ -921,7 +927,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
             </Text>
             <TouchableOpacity 
               style={styles.warningButton}
-              onPress={() => setShowWarningModal(false)}
+              onPress={handleWarningConfirm}
             >
               <Text style={styles.warningButtonText}>אישור</Text>
             </TouchableOpacity>
@@ -954,13 +960,23 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
               <Text style={styles.containerNote}>*{scannedPackages.length} חבילות כולל</Text>
             </View>
             
+            <TouchableOpacity 
+              style={[styles.confirmButton, { marginTop: 20, backgroundColor: '#0066CC' }]}
+              onPress={() => {
+                setScannerMode('handcuff');
+                setShowScanner(true);
+                setShowHandcuffModal(false); // Hide handcuff modal while scanning
+              }}
+            >
+              <Text style={styles.confirmButtonText}>סרוק או הזן ברקוד אזיקון</Text>
+            </TouchableOpacity>
+            
             <TextInput
-              style={[styles.input, { marginTop: 20, marginBottom: 20 }]}
+              style={[styles.input, { marginTop: 10, marginBottom: 20 }]}
               value={handcuffBarcode}
               onChangeText={setHandcuffBarcode}
-              placeholder="סרוק או הזן ברקוד אזיקון"
+              placeholder="או הזן ידנית"
               keyboardType="default"
-              autoFocus={true}
               autoCapitalize="characters"
             />
             
