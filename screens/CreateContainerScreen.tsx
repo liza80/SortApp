@@ -20,6 +20,16 @@ interface ScannedPackage {
   address: string;
   customer: string;
   timestamp: Date;
+  distributionArea?: string;
+  line?: string;
+}
+
+interface LastScannedShipment {
+  barcode: string;
+  customer: string;
+  address: string;
+  distributionArea?: string;
+  line?: string;
 }
 
 export default function CreateContainerScreen({ navigation }: CreateContainerScreenProps) {
@@ -42,6 +52,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
   const [showContainerDetails, setShowContainerDetails] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [scannerMode, setScannerMode] = useState<'package' | 'handcuff'>('package');
+  const [lastScannedShipment, setLastScannedShipment] = useState<LastScannedShipment | null>(null);
 
   const handleConfirmContainerDetails = async () => {
     console.log('handleConfirmContainerDetails called');
@@ -149,29 +160,63 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
           console.log('✅ Successfully got HeaderId:', headerId);
         }
         
-                // Get real location data from the API response - NO FAKE DEFAULTS!
-                let branchCode = response.data?.branch || response.data?.Branch || '';
-                let areaCode = response.data?.distributionArea || response.data?.DistributionArea || '';
-                let lineCode = response.data?.line || response.data?.Line || '';
+                // Get real location data from the API response
+                // The API response structure might vary, check all possible locations
+                console.log('📋 Looking for distribution data in response:', {
+                  'response.data': response.data,
+                  'response.data.data': response.data?.data,
+                  'response.data keys': response.data ? Object.keys(response.data) : [],
+                  'response.data.data keys': response.data?.data ? Object.keys(response.data.data) : []
+                });
                 
-                console.log('📍 Location data from API:', {
-                  branchCode,
+                // Check multiple possible response structures
+                const responseData = response.data?.data || response.data || {};
+                
+                // Extract distribution values from the response
+                let lineCode = responseData.distributionLine || 
+                               responseData.DistributionLine || 
+                               responseData.line || 
+                               responseData.Line || 
+                               '';
+                               
+                let areaCode = responseData.distributionArea || 
+                               responseData.DistributionArea || 
+                               responseData.area || 
+                               responseData.Area || 
+                               '';
+                               
+                let segmentCode = responseData.distributionSegment || 
+                                  responseData.DistributionSegment || 
+                                  responseData.segment || 
+                                  responseData.Segment || 
+                                  '';
+                
+                let branchCode = responseData.branch || responseData.Branch || '';
+                let exitDescription = responseData.exitDescription || responseData.ExitDescription || '';
+                
+                console.log('📍 Distribution data extracted from API:', {
+                  lineCode,
                   areaCode,
-                  lineCode
+                  segmentCode,
+                  branchCode,
+                  exitDescription,
+                  rawResponseData: responseData
                 });
                 
                 setExitZoneDetails({
                   exitNumber: exitZone,
                   distributionPoint: distributionPoint,
-                  description: `צ'יטה שופט חולון - ${distributionPoint}`,
-                  area: 'אריה שגריר 4, חולון',
-                  line: lineCode,
+                  description: exitDescription || `נקודת חלוקה ${distributionPoint}`,
+                  area: areaCode, // Real distribution area from API
+                  line: lineCode, // Real distribution line from API
+                  segment: segmentCode, // Real distribution segment from API
                   routeNumber: branchCode,
                   floorNumber: areaCode,
                   headerId: headerId // Store the HeaderId for package addition
                 });
 
-        setShowContainerDetails(true);
+        // After successful container creation, directly go to scanning tab
+        setCurrentTab('scanning');
       } else {
         console.error('Container creation failed:', response);
         const errorMsg = response.errorMessage || response.data?.errorMessage || 'אירעה שגיאה ביצירת המארז';
@@ -210,7 +255,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
   };
 
   const handleProceedToScanning = async () => {
-    // Skip initialization - not needed with the actual createContainer method
+    // Don't fetch PCC details here - only after container is fully closed
     console.log('Container ready for packages. Moving to scanning tab...');
     setCurrentTab('scanning');
   };
@@ -401,6 +446,15 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
 
         setScannedPackages([...scannedPackages, newPackage]);
         setPackageInput('');
+        
+        // Set last scanned shipment for display
+        setLastScannedShipment({
+          barcode: code,
+          customer: shipmentCustomer,
+          address: shipmentAddress,
+          distributionArea: exitZoneDetails?.floorNumber,
+          line: exitZoneDetails?.line
+        });
         
         // Package added successfully - input will auto-focus for next scan
       } else {
@@ -603,6 +657,56 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
       }
       
       console.log('✅ Container ended successfully');
+      
+      // Fetch PCC details AFTER container is closed
+      try {
+        console.log('📦 Fetching details for closed container PCC:', containerPCC);
+        const pccResponse = await operationalAppAPI.getShipmentByNumber(containerPCC);
+        
+        if (pccResponse && pccResponse.success && pccResponse.data && pccResponse.data.length > 0) {
+          const pccData = pccResponse.data[0];
+          
+          // Extract PUDO details if available
+          if (pccData.pudo) {
+            setExitZoneDetails((prev: any) => ({
+              ...prev,
+              description: pccData.pudo?.pudoName || pccData.pudo?.pudoAddress || prev?.description,
+              pudoAddress: pccData.pudo?.pudoAddress,
+              pudoName: pccData.pudo?.pudoName
+            }));
+            console.log('✅ PUDO details fetched for closed container:', pccData.pudo);
+          }
+          
+          // Extract shipment details AND distribution data if available  
+          if (pccData.shipment) {
+            const shipment = pccData.shipment;
+            console.log('📦 Shipment details fetched for closed container:', shipment);
+            
+            // Extract the distribution line, area, and segment from shipment
+            const distributionLine = shipment.distributionLine || '';
+            const distributionArea = shipment.distributionArea || '';
+            const distributionSegment = shipment.distributionSegment || '';
+            
+            console.log('📍 Distribution data from shipment:', {
+              line: distributionLine,
+              area: distributionArea,
+              segment: distributionSegment
+            });
+            
+            setExitZoneDetails((prev: any) => ({
+              ...prev,
+              customerName: shipment.customerName || prev?.customerName,
+              destinationAddress: shipment.destinationAddress || prev?.destinationAddress,
+              // Update distribution data from the shipment response
+              line: distributionLine || prev?.line,
+              area: distributionArea || prev?.area,
+              segment: distributionSegment || prev?.segment
+            }));
+          }
+        }
+      } catch (error) {
+        console.log('Could not fetch PCC details after closure:', error);
+      }
 
       // Also record the packages that were added to the container
       // In a real implementation, this would be done through a different API endpoint
@@ -739,34 +843,6 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
               editable={!showContainerDetails}
             />
 
-            {showContainerDetails && exitZoneDetails && (
-              <View style={styles.detailsSection}>
-                <Text style={styles.detailsText}>
-                  {exitZoneDetails.description}
-                </Text>
-                <Text style={styles.detailsSubText}>
-                  {exitZoneDetails.area}
-                </Text>
-                
-                <View style={styles.routeButtonsContainer}>
-                  {exitZoneDetails.routeNumber ? (
-                    <View style={styles.routeButtonBlack}>
-                      <Text style={styles.routeButtonText}>סניף {exitZoneDetails.routeNumber}</Text>
-                    </View>
-                  ) : null}
-                  {exitZoneDetails.floorNumber ? (
-                    <View style={styles.routeButtonBlack}>
-                      <Text style={styles.routeButtonText}>אזור הפצה {exitZoneDetails.floorNumber}</Text>
-                    </View>
-                  ) : null}
-                  {exitZoneDetails.line ? (
-                    <View style={styles.routeButtonBlack}>
-                      <Text style={styles.routeButtonText}>קו {exitZoneDetails.line}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            )}
           </View>
         ) : (
           <View style={styles.scanningContent}>
@@ -822,6 +898,7 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
           </View>
         )}
       </ScrollView>
+
 
       {/* Bottom Buttons */}
       <View style={styles.bottomButtons}>
@@ -1020,7 +1097,41 @@ export default function CreateContainerScreen({ navigation }: CreateContainerScr
             <Text style={styles.successModalMessage}>
               מארז {containerPCC}{'\n'}הוקם בהצלחה!
             </Text>
-            <TouchableOpacity 
+            
+            {/* Distribution details with real data only - no mock data */}
+            {exitZoneDetails && (
+              <View style={styles.detailsSection}>
+                {(exitZoneDetails.pudoName || exitZoneDetails.description) && (
+                  <Text style={styles.detailsText}>
+                    {exitZoneDetails.pudoName || exitZoneDetails.description}
+                  </Text>
+                )}
+                {exitZoneDetails.pudoAddress && (
+                  <Text style={styles.detailsSubText}>{exitZoneDetails.pudoAddress}</Text>
+                )}
+                
+                {/* Show badges with real distribution data only */}
+                <View style={styles.routeButtonsContainer}>
+                  {exitZoneDetails.area && (
+                    <TouchableOpacity style={styles.routeButtonBlack}>
+                      <Text style={styles.routeButtonText}>אזור הפצה {exitZoneDetails.area}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {exitZoneDetails.line && (
+                    <TouchableOpacity style={styles.routeButtonBlack}>
+                      <Text style={styles.routeButtonText}>קו {exitZoneDetails.line}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {exitZoneDetails.segment && (
+                    <TouchableOpacity style={styles.routeButtonBlack}>
+                      <Text style={styles.routeButtonText}>מקטע {exitZoneDetails.segment}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+            
+            <TouchableOpacity
               style={styles.successButton}
               onPress={handleSuccessClose}
             >
@@ -1480,6 +1591,7 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
+    marginBottom: 30,
   },
   detailsText: {
     fontSize: 14,
@@ -1496,8 +1608,11 @@ const styles = StyleSheet.create({
   },
   routeButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 15,
+    paddingHorizontal: 10,
   },
   routeButtonBlack: {
     backgroundColor: '#333',
@@ -1560,5 +1675,172 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0088FF',
     fontWeight: '600',
+  },
+  section: {
+    marginBottom: 30,
+  },
+  displayField: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    padding: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  displayFieldText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+  },
+  locationSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 20,
+    marginTop: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  locationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  locationSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  badge: {
+    backgroundColor: '#333',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  lastScannedCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 15,
+    marginHorizontal: 15,
+    marginBottom: 10,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  lastScannedTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+    textAlign: 'right',
+  },
+  lastScannedAddress: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+    textAlign: 'right',
+  },
+  lastScannedBadges: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
+  lastScannedBadge: {
+    backgroundColor: '#666',
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  lastScannedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  containerDetailsCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 15,
+    marginHorizontal: 15,
+    marginBottom: 10,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  containerDetailsHeader: {
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  containerDetailsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  containerDetailsSubtitle: {
+    fontSize: 14,
+    color: '#4CAF50',
+  },
+  containerDetailsInfo: {
+    marginBottom: 15,
+  },
+  distributionPointText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  distributionPointAddress: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  successDetailsSection: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 15,
+  },
+  successDetailTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  successDetailSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
 });
