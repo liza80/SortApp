@@ -5,6 +5,7 @@ import { RootStackParamList } from '../App';
 import { operationalAppAPI } from '../config/api';
 import { AxiosError } from 'axios';
 import AppBarcodeScanner from '../components/AppBarcodeScanner';
+import ActionButton from '../components/ActionButton';
 
 type ShipmentSearchScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShipmentSearch'>;
 
@@ -114,30 +115,22 @@ export default function ShipmentSearchScreen({ navigation }: ShipmentSearchScree
         <Text style={styles.headerTitle}>איתור משלוח</Text>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'manual' && styles.activeTab]}
+      {/* Action Buttons */}
+      <View style={styles.actionButtonsRow}>
+        <ActionButton
+          type="manual"
           onPress={() => setActiveTab('manual')}
-          disabled={loading}
-        >
-          <Text style={[styles.tabText, activeTab === 'manual' && styles.activeTabText]}>
-            הזנה ידנית 📋
-          </Text>
-        </TouchableOpacity>
+          label="הזנה ידנית"
+        />
         
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'barcode' && styles.activeTab]}
+        <ActionButton
+          type="barcode"
           onPress={() => {
             setActiveTab('barcode');
             setShowScanner(true);
           }}
-          disabled={loading}
-        >
-          <Text style={[styles.tabText, activeTab === 'barcode' && styles.activeTabText]}>
-            סריקה ברקוד 📷
-          </Text>
-        </TouchableOpacity>
+          label="סריקת ברקוד"
+        />
       </View>
 
       {/* Content */}
@@ -252,30 +245,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  tabsContainer: {
+  actionButtonsRow: {
     flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    gap: 15,
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 8,
-    padding: 5,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  activeTab: {
-    backgroundColor: '#3949AB',
-  },
-  tabText: {
-    fontSize: 16,
-    color: '#3949AB',
-  },
-  activeTabText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
   },
   content: {
     flex: 1,
