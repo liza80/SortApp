@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, Platform, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, Platform, ScrollView, Modal, FlatList } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import { sortingAPI, shipmentsAPI, operationalAppAPI } from '../config/api';
 import { ShipmentResponse, Shipment, DriverTip, PudoResponse } from '../types/api.types';
+import ActionButton from '../components/ActionButton';
 
 // Conditionally import AppBarcodeScanner only on native platforms
 // Wrapped in try-catch to handle Expo Go which doesn't support VisionCamera
@@ -28,6 +29,15 @@ interface BarcodeScanScreenProps {
   route: BarcodeScanScreenRouteProp;
 }
 
+// Interface for scanned package
+interface ScannedPackage {
+  id: string;
+  shipmentData: ShipmentResponse;
+  scanTime: Date;
+  status: 'success' | 'error' | 'pending';
+  packageType: 'מקור' | 'יעד';
+}
+
 export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScreenProps) {
   const { title, count, headerColor } = route.params;
   // Default to manual mode on web or when scanner unavailable
@@ -39,6 +49,13 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
   const [result, setResult] = useState<any>(null);
   const [shipmentResponseData, setShipmentResponseData] = useState<ShipmentResponse | null>(null);
   const [error, setError] = useState<string>('');
+  const [showScanner, setShowScanner] = useState(false);
+  
+  // New states for popup and list
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [currentScannedPackage, setCurrentScannedPackage] = useState<ShipmentResponse | null>(null);
+  const [scannedPackages, setScannedPackages] = useState<ScannedPackage[]>([]);
+  const [activeTab, setActiveTab] = useState<'all' | 'scanned' | 'errors'>('all');
 
   const handleBarcodeScanned = async (code: string) => {
     console.log('Barcode scanned:', code);
@@ -115,9 +132,13 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
           lastBarcode: codeToProcess
         });
         
+        // Show details modal with the scanned package
+        setCurrentScannedPackage(currentShipmentData);
+        setShowDetailsModal(true);
+        
         // Clear only the input field for next scan
         setInputValue('');
-        // Keep the shipment data visible - it will be replaced when scanning a new item
+        setShipmentResponseData(null); // Clear for next scan
       } else {
         setError('שגיאה בסריקת ברקוד');
       }
@@ -154,58 +175,26 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
         <Text style={styles.headerTitle}>{title} ({count})</Text>
       </View>
 
-      {/* Toggle Buttons */}
-      <View style={styles.toggleContainer}>
-        <TouchableOpacity
-          style={[
-            styles.toggleButton,
-            scanMode === 'manual' && styles.toggleButtonActive
-          ]}
+      {/* Action Buttons */}
+      <View style={styles.actionButtonsRow}>
+        <ActionButton
+          type="manual"
           onPress={() => setScanMode('manual')}
-        >
-          <Text style={[
-            styles.toggleButtonText,
-            scanMode === 'manual' && styles.toggleButtonTextActive
-          ]}>
-            📋 הזיזה ידנית
-          </Text>
-        </TouchableOpacity>
+          label="הזנה ידנית"
+        />
 
-        <TouchableOpacity
-          style={[
-            styles.toggleButton,
-            scanMode === 'barcode' && styles.toggleButtonActive,
-            !canUseScanner && styles.toggleButtonDisabled
-          ]}
+        <ActionButton
+          type="barcode"
           onPress={() => {
             if (canUseScanner) {
-              setScanMode('barcode');
+              setShowScanner(true);
             }
           }}
-          disabled={!canUseScanner}
-        >
-          <Text style={[
-            styles.toggleButtonText,
-            scanMode === 'barcode' && styles.toggleButtonTextActive,
-            !canUseScanner && styles.toggleButtonTextDisabled
-          ]}>
-            🔍 סריקת ברקוד {!canUseScanner && (isWeb ? '(לא זמין באתר)' : '(לא זמין ב-Expo Go)')}
-          </Text>
-        </TouchableOpacity>
+          label={canUseScanner ? "סריקת ברקוד" : "סריקת ברקוד (לא זמין)"}
+        />
       </View>
 
       {/* Main Content */}
-      {scanMode === 'barcode' && canUseScanner ? (
-        <View style={styles.scannerWrapper}>
-          <AppBarcodeScanner
-            onBarcodeScanned={handleBarcodeScanned}
-            handleNoPermission={() => {
-              setError('אין הרשאת מצלמה. עבור להזנה ידנית.');
-              setScanMode('manual');
-            }}
-          />
-        </View>
-      ) : (
         <View style={styles.content}>
           <ScrollView style={styles.scrollContent} contentContainerStyle={styles.contentContainer}>
             <Text style={styles.contentTitle}>הקלד/סרוק חבילה או שק</Text>
@@ -338,7 +327,6 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
           )}
           </ScrollView>
         </View>
-      )}
 
       {/* Bottom Buttons */}
       <View style={styles.bottomButtons}>
@@ -356,6 +344,136 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
           <Text style={styles.cancelButtonText}>ביטול</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Barcode Scanner Modal */}
+      <Modal
+        visible={showScanner}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowScanner(false)}
+      >
+        <SafeAreaView style={styles.scannerContainer}>
+          <View style={styles.scannerHeader}>
+            <TouchableOpacity 
+              onPress={() => setShowScanner(false)}
+              style={styles.scannerCloseButton}
+            >
+              <Text style={styles.scannerCloseText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.scannerTitle}>
+              סריקת חבילה
+            </Text>
+          </View>
+          
+          <AppBarcodeScanner 
+            onBarcodeScanned={(code: string) => {
+              console.log('Scanned barcode:', code);
+              handleBarcodeScanned(code);
+              setShowScanner(false);
+            }}
+            handleNoPermission={() => setShowScanner(false)}
+          />
+        </SafeAreaView>
+      </Modal>
+
+      {/* Package Details Modal (Popup) */}
+      <Modal
+        visible={showDetailsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDetailsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>משלוח {currentScannedPackage?.shipment.shipmentId}</Text>
+            
+            <View style={styles.modalCard}>
+              <View style={styles.modalRow}>
+                <Text style={styles.modalIcon}>📦</Text>
+                <Text style={styles.modalText}>{currentScannedPackage?.shipment.actualQuantity || 2}</Text>
+              </View>
+              <Text style={styles.modalLabel}>מקור</Text>
+              <Text style={styles.modalAddress}>
+                {currentScannedPackage?.shipment.sourceName || 'לא זמין'}
+              </Text>
+              <Text style={styles.modalDistribution}>
+                {currentScannedPackage?.shipment.sourceAddress || 'כתובת מקור לא זמינה'}
+              </Text>
+              
+              <View style={styles.modalTags}>
+                {currentScannedPackage?.shipment.distributionLine && (
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>קו {currentScannedPackage.shipment.distributionLine}</Text>
+                  </View>
+                )}
+                {currentScannedPackage?.shipment.distributionArea && (
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>אזור הפצה {currentScannedPackage.shipment.distributionArea}</Text>
+                  </View>
+                )}
+                {currentScannedPackage?.shipment.distributionSegment && (
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>סניף {currentScannedPackage.shipment.distributionSegment}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            
+            <View style={[styles.modalCard, styles.modalCardPurple]}>
+              <View style={styles.modalRow}>
+                <Text style={styles.modalIcon}>📦</Text>
+                <Text style={styles.modalText}>{currentScannedPackage?.shipment.actualQuantity || 2}</Text>
+              </View>
+              <Text style={styles.modalLabel}>יעד</Text>
+              <Text style={styles.modalAddress}>
+                {currentScannedPackage?.shipment.destinationAddress || 'כתובת יעד לא זמינה'}
+              </Text>
+              <Text style={styles.modalDistribution}>
+                {currentScannedPackage?.shipment.destinationCityCode ? 
+                  `עיר: ${currentScannedPackage.shipment.destinationCityCode}` : 
+                  'עיר לא זמינה'}
+              </Text>
+              
+              <View style={styles.modalTags}>
+                {currentScannedPackage?.shipment.distributionLine && (
+                  <View style={[styles.tag, styles.tagDark]}>
+                    <Text style={styles.tagTextLight}>קו {currentScannedPackage.shipment.distributionLine}</Text>
+                  </View>
+                )}
+                {currentScannedPackage?.shipment.distributionArea && (
+                  <View style={[styles.tag, styles.tagDark]}>
+                    <Text style={styles.tagTextLight}>אזור הפצה {currentScannedPackage.shipment.distributionArea}</Text>
+                  </View>
+                )}
+                {currentScannedPackage?.shipment.distributionSegment && (
+                  <View style={[styles.tag, styles.tagDark]}>
+                    <Text style={styles.tagTextLight}>סניף {currentScannedPackage.shipment.distributionSegment}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.modalOkButton}
+              onPress={() => {
+                // Add package to list
+                const newPackage: ScannedPackage = {
+                  id: String(currentScannedPackage?.shipment.shipmentId || ''),
+                  shipmentData: currentScannedPackage!,
+                  scanTime: new Date(),
+                  status: 'success',
+                  packageType: currentScannedPackage?.shipment.shipmentType === 2 ? 'יעד' : 'מקור'
+                };
+                setScannedPackages([...scannedPackages, newPackage]);
+                setShowDetailsModal(false);
+                setCurrentScannedPackage(null);
+              }}
+            >
+              <Text style={styles.modalOkText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -363,30 +481,50 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F9FA',
   },
   header: {
-    backgroundColor: '#0066CC',
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
-    paddingTop: 10,
+    paddingHorizontal: 20,
+    paddingTop: 15,
+    paddingBottom: 20,
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
   },
   backButton: {
-    padding: 5,
-    marginRight: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F0F2F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
   },
   backArrow: {
-    fontSize: 24,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontSize: 22,
+    color: '#1A1A1A',
+    fontWeight: '600',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
     flex: 1,
-    textAlign: 'left',
+    letterSpacing: -0.3,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 12,
+    backgroundColor: 'transparent',
   },
   toggleContainer: {
     flexDirection: 'row',
@@ -428,103 +566,129 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 10,
-    paddingBottom: 10,
+    padding: 20,
+    paddingBottom: 20,
   },
   scannerWrapper: {
     flex: 1,
     backgroundColor: '#000',
   },
   contentTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 10,
-    color: '#333',
+    marginBottom: 20,
+    color: '#1A1A1A',
+    letterSpacing: -0.3,
   },
   inputContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 16,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 3,
   },
   inputLabel: {
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 8,
-    color: '#666',
+    marginBottom: 12,
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 16,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 20,
     textAlign: 'center',
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#F9FAFB',
+    fontWeight: '600',
   },
   bottomButtons: {
     flexDirection: 'row',
-    padding: 15,
-    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingBottom: 24,
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 8,
   },
   confirmButton: {
     flex: 1,
-    backgroundColor: '#87CEEB',
-    borderRadius: 10,
-    padding: 18,
+    backgroundColor: '#4F46E5',
+    borderRadius: 16,
+    paddingVertical: 18,
     alignItems: 'center',
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   confirmButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
   cancelButton: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
+    borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#0066CC',
-    padding: 18,
+    borderColor: '#E5E7EB',
+    paddingVertical: 18,
     alignItems: 'center',
   },
   cancelButtonText: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#0066CC',
+    color: '#6B7280',
+    letterSpacing: 0.3,
   },
   loadingContainer: {
-    marginTop: 8,
-    padding: 8,
-    backgroundColor: '#FFF9C4',
-    borderRadius: 6,
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
   },
   loadingText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#F57C00',
+    color: '#92400E',
   },
   errorContainer: {
     marginTop: 20,
-    padding: 15,
-    backgroundColor: '#FFEBEE',
-    borderRadius: 10,
+    padding: 16,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
   },
   errorText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#D32F2F',
+    color: '#991B1B',
     textAlign: 'center',
+    lineHeight: 22,
   },
   resultContainer: {
     marginTop: 20,
@@ -575,82 +739,90 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   shipmentDataContainer: {
-    marginTop: 10,
+    marginTop: 20,
     backgroundColor: '#FFFFFF',
-    borderRadius: 6,
+    borderRadius: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: 'hidden',
   },
   shipmentDataTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#0066CC',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
     textAlign: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    backgroundColor: '#F8F9FA',
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
+    paddingVertical: 14,
+    backgroundColor: '#F3F4F6',
+    letterSpacing: -0.2,
   },
   shipmentDataRow: {
-    paddingHorizontal: 15,
-    paddingVertical: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8E8E8',
+    borderBottomColor: '#F3F4F6',
   },
   shipmentDataLabel: {
-    fontSize: 11,
-    fontWeight: '400',
-    color: '#666666',
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#9CA3AF',
     textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   shipmentDataValue: {
-    fontSize: 13,
-    color: '#000000',
+    fontSize: 15,
+    color: '#1A1A1A',
     textAlign: 'center',
-    fontWeight: '400',
+    fontWeight: '600',
+    lineHeight: 20,
   },
   warningText: {
     color: '#D32F2F',
     fontWeight: 'bold',
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1565C0',
-    marginTop: 10,
-    marginBottom: 6,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4F46E5',
+    marginTop: 16,
+    marginBottom: 10,
+    paddingHorizontal: 20,
     textAlign: 'center',
+    letterSpacing: -0.2,
   },
   tipContainer: {
-    backgroundColor: '#FFF9C4',
-    padding: 8,
-    marginVertical: 3,
-    borderRadius: 6,
-    borderLeftWidth: 3,
-    borderLeftColor: '#F57C00',
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    marginHorizontal: 20,
+    marginVertical: 4,
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
   },
   tipText: {
-    fontSize: 13,
-    color: '#424242',
-    lineHeight: 18,
+    fontSize: 14,
+    color: '#78350F',
+    lineHeight: 20,
+    fontWeight: '500',
   },
   returnShipmentBadge: {
-    backgroundColor: '#FF9800',
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 10,
+    backgroundColor: '#F59E0B',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 12,
     alignItems: 'center',
   },
   returnShipmentText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
   summarySection: {
     backgroundColor: '#F5F7FA',
@@ -681,5 +853,131 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#000000',
+  },
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  scannerHeader: {
+    backgroundColor: '#87CEEB',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  scannerCloseButton: {
+    position: 'absolute',
+    left: 20,
+    padding: 5,
+  },
+  scannerCloseText: {
+    fontSize: 24,
+    color: '#000',
+  },
+  scannerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  // Modal styles for package details popup
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  modalCardPurple: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#9C27B0',
+    borderWidth: 2,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  modalIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  modalText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 5,
+  },
+  modalAddress: {
+    fontSize: 15,
+    color: '#333',
+    marginBottom: 5,
+  },
+  modalDistribution: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+  },
+  modalTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  tag: {
+    backgroundColor: '#E5E5E5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    marginRight: 5,
+    marginBottom: 5,
+  },
+  tagDark: {
+    backgroundColor: '#424242',
+  },
+  tagText: {
+    fontSize: 12,
+    color: '#333',
+  },
+  tagTextLight: {
+    color: 'white',
+  },
+  modalOkButton: {
+    backgroundColor: '#0066CC',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignSelf: 'center',
+    marginTop: 10,
+  },
+  modalOkText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
