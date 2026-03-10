@@ -56,6 +56,8 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
   const [scannedPackages, setScannedPackages] = useState<ScannedPackage[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'scanned' | 'errors'>('all');
   const [showListView, setShowListView] = useState(false);
+  const [showCustomsAlert, setShowCustomsAlert] = useState(false);
+  const [customsAlertMessage, setCustomsAlertMessage] = useState('');
 
   const handleBarcodeScanned = async (code: string) => {
     console.log('Barcode scanned:', code);
@@ -93,6 +95,17 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
         if (shipmentResponse.success && shipmentResponse.data && shipmentResponse.data.length > 0) {
           console.log('Shipment data found:', shipmentResponse.data[0]);
           currentShipmentData = shipmentResponse.data[0];
+          
+          // Check if shipment is delayed (at customs)
+          if (currentShipmentData.isDelayedShipment) {
+            console.log('Shipment is delayed at customs:', codeToProcess);
+            setCustomsAlertMessage(`שים לב משלוח מעוכב במכס!\n\nמשלוח ${codeToProcess} מעוכב ואסור למיין אותו.\nיש להחזיר את המשלוח מיידית לסיסוף עמילות`);
+            setShowCustomsAlert(true);
+            setInputValue(''); // Clear input for next scan
+            setLoading(false);
+            return;
+          }
+          
           setShipmentResponseData(currentShipmentData);
         } else {
           console.log('No shipment found or error:', shipmentResponse);
@@ -574,6 +587,46 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
             handleNoPermission={() => setShowScanner(false)}
           />
         </SafeAreaView>
+      </Modal>
+
+      {/* Customs Alert Modal */}
+      <Modal
+        visible={showCustomsAlert}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCustomsAlert(false)}
+      >
+        <View style={styles.customsAlertOverlay}>
+          <View style={styles.customsAlertContainer}>
+            {/* Close button */}
+            <TouchableOpacity 
+              style={styles.customsAlertClose}
+              onPress={() => setShowCustomsAlert(false)}
+            >
+              <Text style={styles.customsAlertCloseText}>✕</Text>
+            </TouchableOpacity>
+            
+            {/* Warning icon */}
+            <View style={styles.customsAlertIconContainer}>
+              <Text style={styles.customsAlertIcon}>!</Text>
+            </View>
+            
+            {/* Message */}
+            <View style={styles.customsAlertMessageContainer}>
+              <Text style={styles.customsAlertMessage}>
+                {customsAlertMessage}
+              </Text>
+            </View>
+            
+            {/* OK Button */}
+            <TouchableOpacity 
+              style={styles.customsAlertButton}
+              onPress={() => setShowCustomsAlert(false)}
+            >
+              <Text style={styles.customsAlertButtonText}>אישור</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
     </SafeAreaView>
@@ -1279,5 +1332,77 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FFFFFF',
     fontWeight: '500',
+  },
+  // Customs Alert Modal styles
+  customsAlertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customsAlertContainer: {
+    backgroundColor: '#FF1744',
+    borderRadius: 20,
+    width: '85%',
+    maxWidth: 350,
+    paddingTop: 30,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  customsAlertClose: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    padding: 5,
+    zIndex: 1,
+  },
+  customsAlertCloseText: {
+    fontSize: 24,
+    color: '#000',
+    fontWeight: 'bold',
+  },
+  customsAlertIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFD54F',
+    borderWidth: 3,
+    borderColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  customsAlertIcon: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  customsAlertMessageContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 15,
+    marginBottom: 20,
+    width: '100%',
+  },
+  customsAlertMessage: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  customsAlertButton: {
+    backgroundColor: '#0066CC',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 50,
+    marginTop: 10,
+  },
+  customsAlertButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });
