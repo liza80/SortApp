@@ -51,11 +51,11 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
   const [error, setError] = useState<string>('');
   const [showScanner, setShowScanner] = useState(false);
   
-  // New states for popup and list
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  // New states for list view
   const [currentScannedPackage, setCurrentScannedPackage] = useState<ShipmentResponse | null>(null);
   const [scannedPackages, setScannedPackages] = useState<ScannedPackage[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'scanned' | 'errors'>('all');
+  const [showListView, setShowListView] = useState(false);
 
   const handleBarcodeScanned = async (code: string) => {
     console.log('Barcode scanned:', code);
@@ -132,13 +132,29 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
           lastBarcode: codeToProcess
         });
         
-        // Show details modal with the scanned package
+        // Set current package and add to list
         setCurrentScannedPackage(currentShipmentData);
-        setShowDetailsModal(true);
         
-        // Clear only the input field for next scan
+        // Add package to list
+        const newPackage: ScannedPackage = {
+          id: String(currentShipmentData.shipment.shipmentId),
+          shipmentData: currentShipmentData,
+          scanTime: new Date(),
+          status: 'success',
+          packageType: currentShipmentData.shipment.shipmentType === 2 ? 'יעד' : 'מקור'
+        };
+        setScannedPackages([...scannedPackages, newPackage]);
+        
+        // Don't switch to list view automatically - keep scanning interface active
+        // setShowListView(true);  // Commented out to keep scanning active
+        setActiveTab('all');
+        
+        // Clear the input field and shipment data for next scan
         setInputValue('');
         setShipmentResponseData(null); // Clear for next scan
+        
+        // Keep scanner modal open if it was open
+        // Scanner will stay open for continuous scanning
       } else {
         setError('שגיאה בסריקת ברקוד');
       }
@@ -194,23 +210,204 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
         />
       </View>
 
+      {/* Toggle View Button - Show when packages have been scanned */}
+      {scannedPackages.length > 0 && (
+        <View style={styles.toggleViewContainer}>
+          <TouchableOpacity
+            style={styles.toggleViewButton}
+            onPress={() => setShowListView(!showListView)}
+          >
+            <Text style={styles.toggleViewText}>
+              {showListView ? '🔙 חזור לסריקה' : `📋 הצג רשימה (${scannedPackages.length})`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Main Content */}
         <View style={styles.content}>
-          <ScrollView style={styles.scrollContent} contentContainerStyle={styles.contentContainer}>
-            <Text style={styles.contentTitle}>הקלד/סרוק חבילה או שק</Text>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>מספר</Text>
-              <TextInput
-                style={styles.input}
-                value={inputValue}
-                onChangeText={setInputValue}
-                placeholder=""
-                keyboardType="default"
-                autoFocus={true}
-                editable={!loading}
+          {showListView ? (
+            <>
+              {/* Tabs */}
+              <View style={styles.tabsContainer}>
+                <TouchableOpacity 
+                  style={[styles.tab, activeTab === 'errors' && styles.activeTab]}
+                  onPress={() => setActiveTab('errors')}
+                >
+                  <Text style={[styles.tabText, activeTab === 'errors' && styles.activeTabText]}>
+                    שגויים ({scannedPackages.filter(p => p.status === 'error').length})
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.tab, activeTab === 'scanned' && styles.activeTab]}
+                  onPress={() => setActiveTab('scanned')}
+                >
+                  <Text style={[styles.tabText, activeTab === 'scanned' && styles.activeTabText]}>
+                    נסרקו ({scannedPackages.filter(p => p.status === 'success').length})
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.tab, activeTab === 'all' && styles.activeTab]}
+                  onPress={() => setActiveTab('all')}
+                >
+                  <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
+                    סרוק
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Package List */}
+              <FlatList
+                data={scannedPackages.filter(p => 
+                  activeTab === 'all' ? true :
+                  activeTab === 'scanned' ? p.status === 'success' :
+                  activeTab === 'errors' ? p.status === 'error' : false
+                )}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  activeTab === 'all' ? (
+                    // Show both source and destination cards in סרוק tab
+                    <View style={styles.doubleCardContainer}>
+                      <Text style={styles.shipmentIdText}>משלוח {item.shipmentData.shipment.shipmentId}</Text>
+                      
+                      {/* Source Card */}
+                      <View style={[styles.detailCard, styles.sourceCard]}>
+                        <View style={styles.cardHeader}>
+                          <View style={styles.packageIcon}>
+                            <Text style={styles.packageIconText}>📦</Text>
+                            <Text style={styles.packageQuantity}>{item.shipmentData.shipment.actualQuantity || 2}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.cardLabel}>מקור</Text>
+                        <Text style={styles.cardAddress}>
+                          {item.shipmentData.shipment.sourceName || 'פוקוס חום בע״מ'}
+                        </Text>
+                        <Text style={styles.cardCity}>
+                          {item.shipmentData.shipment.sourceAddress || 'ארלוזורוב 33 רמת גן'}
+                        </Text>
+                        
+                        <View style={styles.cardTags}>
+                          {item.shipmentData.shipment.distributionLine && (
+                            <View style={styles.lightTag}>
+                              <Text style={styles.lightTagText}>קו {item.shipmentData.shipment.distributionLine}</Text>
+                            </View>
+                          )}
+                          {item.shipmentData.shipment.distributionArea && (
+                            <View style={styles.lightTag}>
+                              <Text style={styles.lightTagText}>אזור הפצה {item.shipmentData.shipment.distributionArea}</Text>
+                            </View>
+                          )}
+                          {item.shipmentData.shipment.distributionSegment && (
+                            <View style={styles.lightTag}>
+                              <Text style={styles.lightTagText}>סניף {item.shipmentData.shipment.distributionSegment}</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                      
+                      {/* Destination Card */}
+                      <View style={[styles.detailCard, styles.destinationCard]}>
+                        <View style={styles.cardHeader}>
+                          <View style={styles.packageIcon}>
+                            <Text style={styles.packageIconText}>📦</Text>
+                            <Text style={styles.packageQuantity}>{item.shipmentData.shipment.actualQuantity || 2}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.cardLabel}>יעד</Text>
+                        <Text style={styles.cardAddress}>
+                          {item.shipmentData.shipment.destinationAddress || 'צ׳יטה שופט חולון - 5432'}
+                        </Text>
+                        <Text style={styles.cardCity}>
+                          {item.shipmentData.shipment.destinationCityCode ? 
+                            `${item.shipmentData.shipment.destinationCityCode}, חולון` : 
+                            'אריה שקנר 4, חולון'}
+                        </Text>
+                        
+                        <View style={styles.cardTags}>
+                          {item.shipmentData.shipment.distributionLine && (
+                            <View style={styles.darkTag}>
+                              <Text style={styles.darkTagText}>קו {item.shipmentData.shipment.distributionLine}</Text>
+                            </View>
+                          )}
+                          {item.shipmentData.shipment.distributionArea && (
+                            <View style={styles.darkTag}>
+                              <Text style={styles.darkTagText}>אזור הפצה {item.shipmentData.shipment.distributionArea}</Text>
+                            </View>
+                          )}
+                          {item.shipmentData.shipment.distributionSegment && (
+                            <View style={styles.darkTag}>
+                              <Text style={styles.darkTagText}>סניף {item.shipmentData.shipment.distributionSegment}</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  ) : (
+                    // Show different colored cards based on tab
+                    <View style={[
+                      styles.packageCard,
+                      activeTab === 'scanned' && styles.packageCardWhite  // White for scanned
+                      // Default pink for errors (no need for extra style)
+                    ]}>
+                      <View style={styles.packageHeader}>
+                        <View style={styles.packageIcon}>
+                          <Text style={styles.packageIconText}>📦</Text>
+                          <Text style={styles.packageQuantity}>{item.shipmentData.shipment.actualQuantity || 2}</Text>
+                        </View>
+                        <Text style={styles.packageNumber}>{item.shipmentData.shipment.shipmentId}</Text>
+                      </View>
+                      
+                      <Text style={styles.packageAddress}>
+                        {item.shipmentData.shipment.destinationAddress || 'צ׳יטה שופט חולון - 5432'}
+                      </Text>
+                      <Text style={styles.packageCity}>
+                        {item.shipmentData.shipment.destinationCityCode ? 
+                          `${item.shipmentData.shipment.destinationCityCode}, חולון` : 
+                          'אריה שקנר 4, חולון'}
+                      </Text>
+                      
+                      <View style={styles.packageTags}>
+                        {item.shipmentData.shipment.distributionLine && (
+                          <View style={styles.packageTag}>
+                            <Text style={styles.packageTagText}>קו {item.shipmentData.shipment.distributionLine}</Text>
+                          </View>
+                        )}
+                        {item.shipmentData.shipment.distributionArea && (
+                          <View style={styles.packageTag}>
+                            <Text style={styles.packageTagText}>אזור הפצה {item.shipmentData.shipment.distributionArea}</Text>
+                          </View>
+                        )}
+                        {item.shipmentData.shipment.distributionSegment && (
+                          <View style={styles.packageTag}>
+                            <Text style={styles.packageTagText}>סניף {item.shipmentData.shipment.distributionSegment}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )
+                )}
+                contentContainerStyle={styles.listContent}
               />
-            </View>
+            </>
+          ) : (
+            <>
+              <ScrollView style={styles.scrollContent} contentContainerStyle={styles.contentContainer}>
+                <Text style={styles.contentTitle}>הקלד/סרוק חבילה או שק</Text>
+                
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>מספר</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={inputValue}
+                    onChangeText={setInputValue}
+                    placeholder=""
+                    keyboardType="default"
+                    autoFocus={true}
+                    editable={!loading}
+                  />
+                </View>
 
           {/* Loading State */}
           {loading && (
@@ -326,6 +523,8 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
           </View>
           )}
           </ScrollView>
+            </>
+          )}
         </View>
 
       {/* Bottom Buttons */}
@@ -369,111 +568,14 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
             onBarcodeScanned={(code: string) => {
               console.log('Scanned barcode:', code);
               handleBarcodeScanned(code);
-              setShowScanner(false);
+              // Don't close scanner modal - allow continuous scanning
+              // setShowScanner(false);  // Commented out for continuous scanning
             }}
             handleNoPermission={() => setShowScanner(false)}
           />
         </SafeAreaView>
       </Modal>
 
-      {/* Package Details Modal (Popup) */}
-      <Modal
-        visible={showDetailsModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowDetailsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>משלוח {currentScannedPackage?.shipment.shipmentId}</Text>
-            
-            <View style={styles.modalCard}>
-              <View style={styles.modalRow}>
-                <Text style={styles.modalIcon}>📦</Text>
-                <Text style={styles.modalText}>{currentScannedPackage?.shipment.actualQuantity || 2}</Text>
-              </View>
-              <Text style={styles.modalLabel}>מקור</Text>
-              <Text style={styles.modalAddress}>
-                {currentScannedPackage?.shipment.sourceName || 'לא זמין'}
-              </Text>
-              <Text style={styles.modalDistribution}>
-                {currentScannedPackage?.shipment.sourceAddress || 'כתובת מקור לא זמינה'}
-              </Text>
-              
-              <View style={styles.modalTags}>
-                {currentScannedPackage?.shipment.distributionLine && (
-                  <View style={styles.tag}>
-                    <Text style={styles.tagText}>קו {currentScannedPackage.shipment.distributionLine}</Text>
-                  </View>
-                )}
-                {currentScannedPackage?.shipment.distributionArea && (
-                  <View style={styles.tag}>
-                    <Text style={styles.tagText}>אזור הפצה {currentScannedPackage.shipment.distributionArea}</Text>
-                  </View>
-                )}
-                {currentScannedPackage?.shipment.distributionSegment && (
-                  <View style={styles.tag}>
-                    <Text style={styles.tagText}>סניף {currentScannedPackage.shipment.distributionSegment}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            
-            <View style={[styles.modalCard, styles.modalCardPurple]}>
-              <View style={styles.modalRow}>
-                <Text style={styles.modalIcon}>📦</Text>
-                <Text style={styles.modalText}>{currentScannedPackage?.shipment.actualQuantity || 2}</Text>
-              </View>
-              <Text style={styles.modalLabel}>יעד</Text>
-              <Text style={styles.modalAddress}>
-                {currentScannedPackage?.shipment.destinationAddress || 'כתובת יעד לא זמינה'}
-              </Text>
-              <Text style={styles.modalDistribution}>
-                {currentScannedPackage?.shipment.destinationCityCode ? 
-                  `עיר: ${currentScannedPackage.shipment.destinationCityCode}` : 
-                  'עיר לא זמינה'}
-              </Text>
-              
-              <View style={styles.modalTags}>
-                {currentScannedPackage?.shipment.distributionLine && (
-                  <View style={[styles.tag, styles.tagDark]}>
-                    <Text style={styles.tagTextLight}>קו {currentScannedPackage.shipment.distributionLine}</Text>
-                  </View>
-                )}
-                {currentScannedPackage?.shipment.distributionArea && (
-                  <View style={[styles.tag, styles.tagDark]}>
-                    <Text style={styles.tagTextLight}>אזור הפצה {currentScannedPackage.shipment.distributionArea}</Text>
-                  </View>
-                )}
-                {currentScannedPackage?.shipment.distributionSegment && (
-                  <View style={[styles.tag, styles.tagDark]}>
-                    <Text style={styles.tagTextLight}>סניף {currentScannedPackage.shipment.distributionSegment}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <TouchableOpacity 
-              style={styles.modalOkButton}
-              onPress={() => {
-                // Add package to list
-                const newPackage: ScannedPackage = {
-                  id: String(currentScannedPackage?.shipment.shipmentId || ''),
-                  shipmentData: currentScannedPackage!,
-                  scanTime: new Date(),
-                  status: 'success',
-                  packageType: currentScannedPackage?.shipment.shipmentType === 2 ? 'יעד' : 'מקור'
-                };
-                setScannedPackages([...scannedPackages, newPackage]);
-                setShowDetailsModal(false);
-                setCurrentScannedPackage(null);
-              }}
-            >
-              <Text style={styles.modalOkText}>OK</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -558,6 +660,28 @@ const styles = StyleSheet.create({
   },
   toggleButtonTextDisabled: {
     color: '#999',
+  },
+  // Toggle View Button styles
+  toggleViewContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
+  toggleViewButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  toggleViewText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
   content: {
     flex: 1,
@@ -979,5 +1103,181 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Tabs styles
+  tabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#F5F5F5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#0066CC',
+  },
+  tabText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  activeTabText: {
+    color: '#0066CC',
+    fontWeight: '700',
+  },
+  // Package list styles
+  listContent: {
+    padding: 15,
+  },
+  packageCard: {
+    backgroundColor: '#FFE5E5',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FFB3B3',
+  },
+  packageCardWhite: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E0E0E0',
+  },
+  packageCardRed: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#EF4444',
+  },
+  packageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  packageIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  packageIconText: {
+    fontSize: 20,
+  },
+  packageQuantity: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 5,
+  },
+  packageNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  packageAddress: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 3,
+  },
+  packageCity: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 10,
+  },
+  packageTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  packageTag: {
+    backgroundColor: '#424242',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 5,
+  },
+  packageTagText: {
+    fontSize: 11,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  // Source and Destination Cards styles for סרוק tab
+  doubleCardContainer: {
+    marginBottom: 15,
+  },
+  shipmentIdText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+    color: '#333',
+  },
+  detailCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  sourceCard: {
+    borderColor: '#E0E0E0',
+  },
+  destinationCard: {
+    borderColor: '#9C27B0',
+    borderWidth: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  cardLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 5,
+  },
+  cardAddress: {
+    fontSize: 15,
+    color: '#333',
+    marginBottom: 5,
+  },
+  cardCity: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+  },
+  cardTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  lightTag: {
+    backgroundColor: '#E5E5E5',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 5,
+    marginBottom: 5,
+  },
+  lightTagText: {
+    fontSize: 11,
+    color: '#333',
+    fontWeight: '500',
+  },
+  darkTag: {
+    backgroundColor: '#424242',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 5,
+    marginBottom: 5,
+  },
+  darkTagText: {
+    fontSize: 11,
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
 });
