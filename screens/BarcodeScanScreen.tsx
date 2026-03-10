@@ -223,53 +223,51 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
         />
       </View>
 
-      {/* Toggle View Button - Show when packages have been scanned */}
-      {scannedPackages.length > 0 && (
-        <View style={styles.toggleViewContainer}>
-          <TouchableOpacity
-            style={styles.toggleViewButton}
-            onPress={() => setShowListView(!showListView)}
-          >
-            <Text style={styles.toggleViewText}>
-              {showListView ? '🔙 חזור לסריקה' : `📋 הצג רשימה (${scannedPackages.length})`}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Tabs - Always visible */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'errors' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('errors');
+            setShowListView(true);
+          }}
+        >
+          <Text style={[styles.tabText, activeTab === 'errors' && styles.activeTabText]}>
+            שגויים {scannedPackages.filter(p => p.status === 'error').length > 0 && 
+              `(${scannedPackages.filter(p => p.status === 'error').length})`}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'scanned' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('scanned');
+            setShowListView(true);
+          }}
+        >
+          <Text style={[styles.tabText, activeTab === 'scanned' && styles.activeTabText]}>
+            נסרקו {scannedPackages.filter(p => p.status === 'success').length > 0 && 
+              `(${scannedPackages.filter(p => p.status === 'success').length})`}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'all' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('all');
+            setShowListView(false);
+          }}
+        >
+          <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
+            סרוק
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Main Content */}
         <View style={styles.content}>
           {showListView ? (
             <>
-              {/* Tabs */}
-              <View style={styles.tabsContainer}>
-                <TouchableOpacity 
-                  style={[styles.tab, activeTab === 'errors' && styles.activeTab]}
-                  onPress={() => setActiveTab('errors')}
-                >
-                  <Text style={[styles.tabText, activeTab === 'errors' && styles.activeTabText]}>
-                    שגויים ({scannedPackages.filter(p => p.status === 'error').length})
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.tab, activeTab === 'scanned' && styles.activeTab]}
-                  onPress={() => setActiveTab('scanned')}
-                >
-                  <Text style={[styles.tabText, activeTab === 'scanned' && styles.activeTabText]}>
-                    נסרקו ({scannedPackages.filter(p => p.status === 'success').length})
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.tab, activeTab === 'all' && styles.activeTab]}
-                  onPress={() => setActiveTab('all')}
-                >
-                  <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
-                    סרוק
-                  </Text>
-                </TouchableOpacity>
-              </View>
 
               {/* Package List */}
               <FlatList
@@ -288,7 +286,7 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
                       {/* Source Card */}
                       <View style={[styles.detailCard, styles.sourceCard]}>
                         <View style={styles.cardHeader}>
-                          <View style={styles.packageIcon}>
+                          <View style={styles.packageIconContainer}>
                             <Text style={styles.packageIconText}>📦</Text>
                             <Text style={styles.packageQuantity}>{item.shipmentData.shipment.actualQuantity || 2}</Text>
                           </View>
@@ -323,7 +321,7 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
                       {/* Destination Card */}
                       <View style={[styles.detailCard, styles.destinationCard]}>
                         <View style={styles.cardHeader}>
-                          <View style={styles.packageIcon}>
+                          <View style={styles.packageIconContainer}>
                             <Text style={styles.packageIconText}>📦</Text>
                             <Text style={styles.packageQuantity}>{item.shipmentData.shipment.actualQuantity || 2}</Text>
                           </View>
@@ -365,7 +363,7 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
                       // Default pink for errors (no need for extra style)
                     ]}>
                       <View style={styles.packageHeader}>
-                        <View style={styles.packageIcon}>
+                        <View style={styles.packageIconContainer}>
                           <Text style={styles.packageIconText}>📦</Text>
                           <Text style={styles.packageQuantity}>{item.shipmentData.shipment.actualQuantity || 2}</Text>
                         </View>
@@ -421,6 +419,87 @@ export default function BarcodeScanScreen({ navigation, route }: BarcodeScanScre
                     editable={!loading}
                   />
                 </View>
+
+                {/* Show current scanned package cards (both source and destination) */}
+                {currentScannedPackage && !error && (
+                  <View style={styles.scannedCardContainer}>
+                    <Text style={styles.scannedShipmentNumber}>
+                      משלוח {currentScannedPackage.shipment.shipmentId}
+                    </Text>
+                    
+                    {/* Source Card */}
+                    <View style={styles.scannedSourceCard}>
+                      <View style={styles.scannedCardHeader}>
+                        <View style={styles.packageIconContainer}>
+                          <Text style={styles.packageIcon}>📦</Text>
+                          <Text style={styles.packageCount}>{currentScannedPackage.shipment.actualQuantity || 2}</Text>
+                        </View>
+                      </View>
+                      
+                      <Text style={styles.scannedCardLabel}>מקור</Text>
+                      <Text style={styles.scannedCardAddress}>
+                        {currentScannedPackage.shipment.sourceName || 'פוקוס חום בע״מ'}
+                      </Text>
+                      <Text style={styles.scannedCardCity}>
+                        {currentScannedPackage.shipment.sourceAddress || 'ארלוזורוב 33 רמת גן'}
+                      </Text>
+                      
+                      <View style={styles.scannedCardTags}>
+                        {currentScannedPackage.shipment.distributionLine && (
+                          <View style={styles.scannedLightTag}>
+                            <Text style={styles.scannedLightTagText}>קו {currentScannedPackage.shipment.distributionLine}</Text>
+                          </View>
+                        )}
+                        {currentScannedPackage.shipment.distributionArea && (
+                          <View style={styles.scannedLightTag}>
+                            <Text style={styles.scannedLightTagText}>אזור הפצה {currentScannedPackage.shipment.distributionArea}</Text>
+                          </View>
+                        )}
+                        {currentScannedPackage.shipment.distributionSegment && (
+                          <View style={styles.scannedLightTag}>
+                            <Text style={styles.scannedLightTagText}>סניף {currentScannedPackage.shipment.distributionSegment}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    
+                    {/* Destination Card */}
+                    <View style={styles.scannedDestinationCard}>
+                      <View style={styles.scannedCardHeader}>
+                        <View style={styles.packageIconContainer}>
+                          <Text style={styles.packageIcon}>📦</Text>
+                          <Text style={styles.packageCount}>{currentScannedPackage.shipment.actualQuantity || 2}</Text>
+                        </View>
+                      </View>
+                      
+                      <Text style={styles.scannedCardLabel}>יעד</Text>
+                      <Text style={styles.scannedCardAddress}>
+                        {'צ׳יטה שופט חולון - 5432'}
+                      </Text>
+                      <Text style={styles.scannedCardCity}>
+                        {currentScannedPackage.shipment.destinationAddress || 'אריה שקנר 4, חולון'}
+                      </Text>
+                      
+                      <View style={styles.scannedCardTags}>
+                        {currentScannedPackage.shipment.distributionLine && (
+                          <View style={styles.scannedTag}>
+                            <Text style={styles.scannedTagText}>קו {currentScannedPackage.shipment.distributionLine}</Text>
+                          </View>
+                        )}
+                        {currentScannedPackage.shipment.distributionArea && (
+                          <View style={styles.scannedTag}>
+                            <Text style={styles.scannedTagText}>אזור הפצה {currentScannedPackage.shipment.distributionArea}</Text>
+                          </View>
+                        )}
+                        {currentScannedPackage.shipment.distributionSegment && (
+                          <View style={styles.scannedTag}>
+                            <Text style={styles.scannedTagText}>סניף {currentScannedPackage.shipment.distributionSegment}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                )}
 
           {/* Loading State */}
           {loading && (
@@ -1404,5 +1483,110 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  // Scanned card styles (shown on scan screen after scanning)
+  scannedCardContainer: {
+    marginTop: 20,
+  },
+  scannedSourceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  scannedDestinationCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 15,
+    borderWidth: 2,
+    borderColor: '#9C27B0',
+    shadowColor: '#9C27B0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  scannedLightTag: {
+    backgroundColor: '#E5E5E5',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 5,
+    marginBottom: 5,
+  },
+  scannedLightTagText: {
+    fontSize: 11,
+    color: '#333',
+    fontWeight: '500',
+  },
+  scannedShipmentNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+    color: '#333',
+  },
+  scannedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 15,
+    borderWidth: 2,
+    borderColor: '#9C27B0',
+    shadowColor: '#9C27B0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  scannedCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  packageIconContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  packageCount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 5,
+  },
+  scannedCardLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 5,
+  },
+  scannedCardAddress: {
+    fontSize: 15,
+    color: '#333',
+    marginBottom: 5,
+  },
+  scannedCardCity: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+  },
+  scannedCardTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  scannedTag: {
+    backgroundColor: '#424242',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 5,
+    marginBottom: 5,
+  },
+  scannedTagText: {
+    fontSize: 11,
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
 });
